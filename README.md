@@ -33,21 +33,21 @@ ModSynth ships as **two mods** (this is required, not cosmetic):
 
 `FS25_zzz_ModSynth` declares `FS25_000_ModSynthHooks` as a dependency, so installing the main mod pulls in the hooks mod automatically.
 
-The 1.1 conflict database (`scripts/ms_catalogue_generated.lua`) is produced offline by `scan_all_hooks.py`, which reads **every** `.lua` in **every** mod and classifies each multi-hook function (true stomp vs. safe chain) using source-level analysis — colon/dot method resolution, super-call detection, append/prepend/manual-chain handling. The mod consumes that dataset at runtime; the heavy analysis stays offline.
+The 1.1 conflict database (`scripts/ms_catalogue_generated.lua`) is produced offline by the included `tools/scan_all_hooks.py`, which reads **every** `.lua` in **every** mod and classifies each multi-hook function (true stomp vs. safe chain) using source-level analysis — colon/dot method resolution, super-call detection, append/prepend/manual-chain handling. The mod consumes that dataset at runtime; the heavy analysis stays offline.
 
 ## Installation
 
 1. Subscribe/download both `FS25_zzz_ModSynth` and `FS25_000_ModSynthHooks` (the second is pulled automatically as a dependency on ModHub).
-2. Launch the game. After the map loads, open `modSynth.log` (in your FS25 profile folder, next to `log.txt`) for the full report.
+2. Launch the game. After the map loads, open `modSynth.log` (in your FS25 profile folder, next to `log.txt`) for the full report. *(If file writing is restricted in your environment, the same report falls back into `log.txt` itself — nothing is lost.)*
 3. Act on anything marked CRITICAL or HIGH; the on-screen warning will tell you if you have two flatly incompatible mods.
 
 ## Regenerating the conflict dataset (advanced)
 
-The shipped dataset is generated from a broad script-mod corpus. To regenerate it from your own install or a different corpus:
+The scanner is included at `tools/scan_all_hooks.py` (set the `MODS_FOLDER` and `OUT_DIR` paths at the top of the file for your system). The shipped dataset comes from a broad script-mod corpus; to regenerate it from your own install or a different corpus:
 
 ```bash
-python scan_all_hooks.py                       # scans the mods folder, re-emits ms_catalogue_generated.lua
-python scan_all_hooks.py --emit-only           # re-emit from the last scan without rescanning
+python tools/scan_all_hooks.py                       # scans the mods folder, re-emits ms_catalogue_generated.lua
+python tools/scan_all_hooks.py --emit-only           # re-emit from the last scan without rescanning
 ```
 
 Then rebuild the `FS25_zzz_ModSynth` zip. Conflicts not yet hand-verified will appear as `uncatalogued` — verify at source and add a catalogue entry to give them an authoritative verdict.
@@ -65,6 +65,7 @@ Then rebuild the `FS25_zzz_ModSynth` zip. Conflicts not yet hand-verified will a
 - Bundled a 280+ conflict database generated from a broad script-mod scan.
 - In-game log capped with overflow summary; full detail always in `modSynth.log`.
 - Hand-verified catalogue expanded 40 → 57 entries.
+- Hardened logging: guarded against a restricted `io` library (the mod can never fail to load over file access), with automatic fallback to the game log so the report is never lost.
 
 **1.0.0.0**
 - Initial release: registry-based hook tracking, 40-entry hand-verified conflict catalogue, safe runtime repairs, incompatible-pair on-screen warnings, multiplayer support.
