@@ -11,5 +11,3 @@ desktop.ini
 Thumbs.db
 .DS_Store
 
-# Stray empty nested repo from an aborted "own folder" git init (safe to delete)
-/FS25_ModSynth/
