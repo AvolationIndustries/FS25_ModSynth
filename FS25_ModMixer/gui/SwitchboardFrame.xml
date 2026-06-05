@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!-- ModMixer Switchboard in-game-menu page. Layout modelled on stock menu frames
+     (fs25_menuContainer / fs25_menuHeaderPanel) + a SmoothList of mod-feature rows.
+     Element ids auto-bind to self.<id> on the frame (categoryHeaderText, featureList). -->
+<GUI name="ModMixerSwitchboard">
+    <GuiElement profile="fs25_menuContainer">
+
+        <GuiElement profile="fs25_menuHeaderPanel">
+            <Bitmap profile="fs25_menuHeaderIconBg">
+                <Bitmap profile="fs25_menuHeaderIcon" id="categoryHeaderIcon"/>
+            </Bitmap>
+            <Text profile="fs25_menuHeaderTitle" id="categoryHeaderText"/>
+        </GuiElement>
+
+        <!-- VIEW tier switch (Simple / By category / Advanced) — its own widget under
+             the header, NOT a chart row. Click the arrows to change tier. -->
+        <Text profile="ModMixer_colHeader" text="VIEW" position="20px -62px" size="70px 24px"/>
+        <MultiTextOption profile="ModMixer_categoryFilter" id="tierSwitch"
+                         position="86px -60px" size="380px 34px" onClick="onTierSwitchChanged"/>
+
+        <!-- Category pager (Tier 2 only): page with the menu's prev/next or the arrows. -->
+        <MultiTextOption profile="ModMixer_categoryFilter" id="categoryFilter"
+                         position="20px -104px" size="520px 34px" onClick="onFilterChanged"/>
+
+        <!-- Feature help box — top right, above the chart (sits above the column headers
+             at -150). Updated on row selection. -->
+        <Text profile="ModMixer_helpBox" id="featureHelp" text=""
+              position="580px -56px" size="920px 88px"/>
+
+        <Text profile="ModMixer_colHeader" text="MOD"     position="20px -150px"  size="300px 24px"/>
+        <Text profile="ModMixer_colHeader" text="FEATURE" position="340px -150px" size="500px 24px"/>
+        <Text profile="ModMixer_colHeader" text="STATE"   position="860px -150px" size="300px 24px"/>
+        <ThreePartBitmap profile="fs25_lineSeparatorTopHighlighted" position="0px -178px"/>
+
+        <SmoothList id="featureList" profile="ModMixer_table" position="20px -186px" size="1480px 540px">
+            <ListItem profile="ModMixer_listItem">
+                <Text profile="ModMixer_cellLeft"  position="20px 0px"  size="300px 40px" name="mod"/>
+                <Text profile="ModMixer_cellLeft"  position="340px 0px" size="500px 40px" name="feature"/>
+                <!-- State text: toggle / hook rows -->
+                <Text profile="ModMixer_cellState" position="860px 0px" size="560px 40px" name="state"/>
+                <!-- Value rows: smooth green fill bar (stock contracts progress-bar
+                     widget — real engine textures; fill nested in track, its width
+                     driven per-row in populateCell) + compact MTO slider. -->
+                <ThreePartBitmap profile="ModMixer_scaleTrack" position="860px -13px" size="280px 14px" name="valueScaleTrack">
+                    <ThreePartBitmap profile="ModMixer_scaleFill" name="valueScaleFill"/>
+                </ThreePartBitmap>
+                <MultiTextOption profile="ModMixer_valueSlider" position="1170px 3px" size="190px 34px"
+                                 name="valueSlider" onClick="onValueSliderChanged"/>
+            </ListItem>
+        </SmoothList>
+
+        <ThreePartBitmap profile="ModMixer_sliderBox" position="1500px -186px" size="6px 540px">
+            <Slider profile="fs25_listSlider" dataElementId="featureList"/>
+        </ThreePartBitmap>
+
+        <!-- Legend — moved to the bottom; its text is set per-tier from Lua. -->
+        <Text profile="ModMixer_headerInfo" id="headerInfo" text=""
+              position="20px -732px" size="1480px 40px"/>
+
+    </GuiElement>
+</GUI>

@@ -1,0 +1,89 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<modDesc descVersion="105">
+    <author>Avolation Industries</author>
+    <version>1.1.0.0</version>
+    <title>
+        <en>ModMixer</en>
+        <de>ModMixer</de>
+    </title>
+    <description>
+        <en>
+Mods silently break each other. When two mods change the same game function, the one that loads last usually wins — and the other mod's work just vanishes, with no error, no crash, and no explanation. ModMixer finds these conflicts and tells you, in plain English, exactly what is fighting what and whether it actually matters.
+
+WHAT IT DOES
+- Scans every Lua hook across your whole mod stack at startup and writes a clear, severity-rated conflict report to ModMixer.log (saved next to your game log).
+- Flags the conflicts that matter — broken overwrites that throw away another mod's work, load-order traps, and incompatible mods that replace the same system — and stays quiet about the harmless ones.
+- Warns you on screen when two genuinely incompatible mods are installed, so you know to remove one.
+- Where a fix is safe and provably correct, it repairs the hook chain automatically at runtime and silences known third-party log spam. Everything else is logged with a plain-English explanation so you decide.
+
+No configuration. No gameplay changes. Zero runtime cost after map load. Safe for multiplayer.
+
+NEW IN 1.1
+ModMixer now ships a built-in conflict database generated from a scan of hundreds of script mods. On top of its hand-verified catalogue, it detects conflicts generically — including brand-new mod combinations nobody has documented yet — and flags anything it does not recognise as "uncatalogued", so nothing slips through silently. The hand-verified catalogue grew to 57 entries.
+
+REQUIRES
+FS25_000_ModMixerHooks (downloaded automatically as a dependency).
+
+LINKS
+GitHub:  https://github.com/AvolationIndustries/FS25_ModMixer
+Discord: https://discord.gg/G2AvqwVJ
+
+By Avolation Industries.
+        </en>
+        <de>
+Mods machen sich gegenseitig stillschweigend kaputt. Wenn zwei Mods dieselbe Spielfunktion verändern, gewinnt meist der zuletzt geladene – und die Arbeit des anderen Mods verschwindet einfach: ohne Fehlermeldung, ohne Absturz, ohne Erklärung. ModMixer findet diese Konflikte und sagt dir in klaren Worten, was genau womit kollidiert und ob es überhaupt eine Rolle spielt.
+
+WAS ES MACHT
+- Untersucht beim Start jeden Lua-Hook in deinem gesamten Mod-Bestand und schreibt einen übersichtlichen, nach Schweregrad sortierten Konfliktbericht in die Datei ModMixer.log (direkt neben deinem Spiel-Log).
+- Hebt die Konflikte hervor, die wirklich zählen – fehlerhafte Überschreibungen, die die Arbeit eines anderen Mods verwerfen, Fallstricke bei der Ladereihenfolge und inkompatible Mods, die dasselbe System ersetzen – und schweigt bei den harmlosen.
+- Warnt dich direkt am Bildschirm, wenn zwei wirklich inkompatible Mods installiert sind, damit du weißt, dass du einen entfernen solltest.
+- Wo eine Korrektur sicher und nachweislich richtig ist, repariert ModMixer die Hook-Kette automatisch zur Laufzeit und unterdrückt bekannten Log-Spam von Drittanbieter-Mods. Alles Übrige wird mit einer verständlichen Erklärung protokolliert, damit du entscheidest.
+
+Keine Konfiguration. Keine Gameplay-Änderungen. Keine Laufzeitkosten nach dem Laden der Karte. Multiplayer-tauglich.
+
+NEU IN 1.1
+ModMixer bringt jetzt eine integrierte Konfliktdatenbank mit, die aus der Analyse hunderter Skript-Mods erstellt wurde. Zusätzlich zum handgeprüften Katalog erkennt es Konflikte nun allgemein – auch brandneue Mod-Kombinationen, die noch niemand dokumentiert hat – und kennzeichnet alles, was es nicht kennt, als "uncatalogued", damit nichts unbemerkt durchrutscht. Der handgeprüfte Katalog ist auf 57 Einträge gewachsen.
+
+VORAUSSETZUNG
+FS25_000_ModMixerHooks (wird automatisch als Abhängigkeit heruntergeladen).
+
+LINKS
+GitHub:  https://github.com/AvolationIndustries/FS25_ModMixer
+Discord: https://discord.gg/G2AvqwVJ
+
+Von Avolation Industries.
+        </de>
+        <fr>
+Les mods se cassent mutuellement, en silence. Quand deux mods modifient la même fonction du jeu, c'est généralement le dernier chargé qui l'emporte – et le travail de l'autre mod disparaît tout simplement : sans erreur, sans plantage, sans explication. ModMixer détecte ces conflits et vous explique clairement ce qui entre en conflit avec quoi, et si cela a vraiment de l'importance.
+
+CE QU'IL FAIT
+- Analyse au démarrage chaque hook Lua de l'ensemble de vos mods et écrit un rapport de conflits clair, classé par gravité, dans le fichier ModMixer.log (à côté du journal du jeu).
+- Met en évidence les conflits qui comptent vraiment – les surcharges défectueuses qui écrasent le travail d'un autre mod, les pièges liés à l'ordre de chargement et les mods incompatibles qui remplacent le même système – et reste silencieux sur ceux qui sont sans conséquence.
+- Vous avertit à l'écran, en jeu, lorsque deux mods réellement incompatibles sont installés, pour que vous sachiez qu'il faut en retirer un.
+- Lorsqu'une correction est sûre et vérifiée, ModMixer répare automatiquement la chaîne de hooks à l'exécution et supprime le spam connu dans le journal provenant de mods tiers. Tout le reste est consigné avec une explication claire, pour que vous décidiez.
+
+Aucune configuration. Aucune modification du gameplay. Aucun coût de performance après le chargement de la carte. Compatible multijoueur.
+
+NOUVEAU DANS LA 1.1
+ModMixer intègre désormais une base de données de conflits générée à partir de l'analyse de centaines de mods de script. En plus de son catalogue vérifié à la main, il détecte maintenant les conflits de manière générale – y compris des combinaisons de mods inédites que personne n'a encore documentées – et signale tout ce qu'il ne reconnaît pas comme "uncatalogued", afin que rien ne passe inaperçu. Le catalogue vérifié à la main compte désormais 57 entrées.
+
+PRÉREQUIS
+FS25_000_ModMixerHooks (téléchargé automatiquement en tant que dépendance).
+
+LIENS
+GitHub :  https://github.com/AvolationIndustries/FS25_ModMixer
+Discord : https://discord.gg/G2AvqwVJ
+
+Par Avolation Industries.
+        </fr>
+    </description>
+    <iconFilename>icon.dds</iconFilename>
+    <multiplayer supported="true"/>
+    <dependencies>
+        <dependency>FS25_000_ModMixerHooks</dependency>
+    </dependencies>
+    <extraSourceFiles>
+        <sourceFile filename="scripts/mm_catalogue_generated.lua"/>
+        <sourceFile filename="scripts/ModMixer.lua"/>
+    </extraSourceFiles>
+</modDesc>

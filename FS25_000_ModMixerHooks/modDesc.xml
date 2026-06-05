@@ -1,25 +1,25 @@
-<?xml version="1.0" encoding="utf-8" standalone="no"?>
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="105">
     <author>Avolation Industries</author>
     <version>1.0.0.0</version>
     <title>
-        <en>ModSynth Hooks</en>
+        <en>ModMixer Hooks</en>
     </title>
     <description>
         <en>
-Companion preloader for ModSynth (FS25_zzz_ModSynth).
+Companion preloader for ModMixer (FS25_zzz_ModMixer).
 
 Loads first (000_ prefix) and patches Utils.overwrittenFunction and
 Utils.appendedFunction to tag every wrapped function with chain metadata.
-ModSynth reads these tags at load time to verify and repair hook chains
+ModMixer reads these tags at load time to verify and repair hook chains
 without needing the debug library or cross-mod globals.
 
-Install alongside FS25_zzz_ModSynth. No configuration needed.
+Install alongside FS25_zzz_ModMixer. No configuration needed.
         </en>
     </description>
     <iconFilename>icon.dds</iconFilename>
     <multiplayer supported="true"/>
     <extraSourceFiles>
-        <sourceFile filename="scripts/ModSynthHooks.lua"/>
+        <sourceFile filename="scripts/ModMixerHooks.lua"/>
     </extraSourceFiles>
 </modDesc>

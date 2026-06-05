@@ -1,9 +1,8 @@
--- ModSynth.lua  v1.2.0.0
--- Unified single-mod build. Hook patching (ModSynthHooks.lua) loads first via
--- extraSourceFiles ordering; analysis defers to Mission00.loadMission00Finished.
+﻿-- ModMixer.lua  v1.0.1
+-- Loads last (zzz_ prefix ensures this) and repairs hook conflicts.
 --
 -- Strategy
---   1. Diagnostic logging: full detail written to modSynth.log (next to game.log).
+--   1. Diagnostic logging: full detail written to ModMixer.log (next to game.log).
 --      The main FS25 game log receives only a brief summary and any incompatible-
 --      mod warnings so it stays clean.
 --   2. Active repair: only when the fix is safe and mathematically correct.
@@ -14,46 +13,46 @@
 --   4. In-game dialog: incompatible mod groups trigger a dialog at map load
 --      so players see the warning without digging through any log file.
 
-local MS_VERSION = "1.2.0.0"
+local MS_VERSION = "1.1.0.0"
 local MOD_NAME   = g_currentModName
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- LOGGING
---   log()     → custom modSynth.log file only (detail, no noise in game.log)
---   logGame() → both modSynth.log AND main FS25 game log (important notices)
+--   log()     → custom ModMixer.log file only (detail, no noise in game.log)
+--   logGame() → both ModMixer.log AND main FS25 game log (important notices)
 -- ─────────────────────────────────────────────────────────────────────────────
 
 local _msLogFile
 do
-    local path = getUserProfileAppPath() .. "modSynth.log"
+    local path = getUserProfileAppPath() .. "ModMixer.log"
     -- Guard raw io: the published ModHub Lua sandbox may restrict/strip `io`.
     -- pcall so a missing io library can never error the whole mod's load.
     local ok, f = pcall(function() return io.open(path, "w") end)
     _msLogFile = ok and f or nil
     if _msLogFile then
         _msLogFile:write(string.format(
-            "ModSynth %s\n%s\n\n",
+            "ModMixer %s\n%s\n\n",
             MS_VERSION, string.rep("-", 60)))
     end
 end
 
 local function log(msg)
-    -- Detail line. Normally goes to modSynth.log; if the file is unavailable
+    -- Detail line. Normally goes to ModMixer.log; if the file is unavailable
     -- (e.g. io restricted in a published sandbox) fall back to the game log so
     -- the full report is never lost.
     if _msLogFile then
         _msLogFile:write(tostring(msg) .. "\n")
         _msLogFile:flush()
     else
-        print("[ModSynth] " .. tostring(msg))
+        print("[ModMixer] " .. tostring(msg))
     end
 end
 
 local function logGame(msg)
-    -- Important line: always to the game log, mirrored into modSynth.log when present.
+    -- Important line: always to the game log, mirrored into ModMixer.log when present.
     -- (Mirror inline rather than calling log(), so we never double-print in the
     -- no-file fallback case.)
-    print(string.format("[ModSynth %s] %s", MS_VERSION, tostring(msg)))
+    print(string.format("[ModMixer %s] %s", MS_VERSION, tostring(msg)))
     if _msLogFile then
         _msLogFile:write(tostring(msg) .. "\n")
         _msLogFile:flush()
@@ -66,10 +65,10 @@ local function present(modFileName)
     return g_modManager:getModByName(name) ~= nil
 end
 
-logGame("=== ModSynth loading ===")
+logGame("=== ModMixer loading ===")
 
--- Guard against double-run when both the source folder (FS25_ModSynth)
--- and the zip (FS25_ModSynth) are present in the mods folder simultaneously.
+-- Guard against double-run when both the source folder (FS25_zzz_ModMixer)
+-- and the zip (FS25_zzz_ModMixer) are present in the mods folder simultaneously.
 if Utils.__ms_compat_loaded then
     logGame("Already loaded by sister copy — skipping duplicate run.")
     return
@@ -182,7 +181,7 @@ local conflicts = {
         severity = "HIGH",
         desc     = "ADS_Specialization.lua registers 'hasBreakdown' twice in its own "
                 .. "registerFunctions (verbatim duplicate). Generates ~470 errors per "
-                .. "load plus a TypeManager nil cascade. ModSynth suppresses the "
+                .. "load plus a TypeManager nil cascade. ModMixer suppresses the "
                 .. "duplicate at runtime — first registration stands, zero errors.",
     },
 
@@ -697,12 +696,12 @@ local conflicts = {
 
     {
         fn       = "FSBaseMission.update",
-        mods     = { "FS25_3DInspector", "FS25_FarmKit", "FS25_RealisticDamage", "FS25_WorkerCosts", "FS25_ModSynth" },
+        mods     = { "FS25_3DInspector", "FS25_FarmKit", "FS25_RealisticDamage", "FS25_WorkerCosts", "FS25_zzz_ModMixer" },
         severity = "INFO",
         desc     = "Five safe appends on the per-frame mission update. Each merely delegates to its own "
                 .. "mod's update (3DInspector overlay, FarmKit slip-HUD decay, RealisticDamage, WorkerCosts "
-                .. "cost accrual, ModSynth's own incompatible-warning timer). Chaining cost negligible; "
-                .. "nothing heavy runs unconditionally. ModSynth itself is one of the five — expected. Log only.",
+                .. "cost accrual, ModMixer's own incompatible-warning timer). Chaining cost negligible; "
+                .. "nothing heavy runs unconditionally. ModMixer itself is one of the five — expected. Log only.",
     },
 
     {
@@ -757,7 +756,7 @@ local conflicts = {
 -- ─────────────────────────────────────────────────────────────────────────────
 -- INCOMPATIBLE PAIRS
 -- Mods that replace the same system entirely. Only one can win. The user should
--- remove one from their mod folder. ModSynth cannot reconcile these.
+-- remove one from their mod folder. ModMixer cannot reconcile these.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 local incompatiblePairs = {
@@ -863,11 +862,11 @@ end
 -- ─────────────────────────────────────────────────────────────────────────────
 
 if #incompatibleWarnings > 0 then
-    local warnLines = { "ModSynth: incompatible mods detected" }
+    local warnLines = { "ModMixer: incompatible mods detected" }
     for _, w in ipairs(incompatibleWarnings) do
         table.insert(warnLines, "  - " .. w.mods)
     end
-    table.insert(warnLines, "Remove all but one from each group (see modSynth.log)")
+    table.insert(warnLines, "Remove all but one from each group (see ModMixer.log)")
 
     local START_DELAY = 2500     -- ms in-world before showing
     local HOLD_MS     = 20000    -- ms fully visible
@@ -939,7 +938,7 @@ end
 if #activeConflicts == 0 then
     logGame("No conflicting mod pairs detected in this installation.")
 else
-    -- Count by severity for the game log summary; full detail is in modSynth.log
+    -- Count by severity for the game log summary; full detail is in ModMixer.log
     local counts = {}
     for _, c in ipairs(activeConflicts) do
         counts[c.severity] = (counts[c.severity] or 0) + 1
@@ -951,14 +950,14 @@ else
         end
     end
     logGame(string.format(
-        "Conflict summary: %s. See modSynth.log for details.",
+        "Conflict summary: %s. See ModMixer.log for details.",
         table.concat(parts, ", ")))
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- SCAN-BASED DETECTION  (offline registry-walker output)
 --
--- ModSynthScan is generated by scan_all_hooks.py from a full static scan of every
+-- ModMixerScan is generated by scan_all_hooks.py from a full static scan of every
 -- installed mod's Lua (all hook forms: overwritten / appended / prepended /
 -- direct-assignment), then loaded ahead of this file via extraSourceFiles. It
 -- covers conflicts beyond the hand catalogue above: we report every scanned
@@ -968,18 +967,18 @@ end
 -- Regenerate after mod changes: python scan_all_hooks.py  (re-emits the dataset).
 -- ─────────────────────────────────────────────────────────────────────────────
 
-if type(ModSynthScan) == "table" and type(ModSynthScan.entries) == "table" then
+if type(ModMixerScan) == "table" and type(ModMixerScan.entries) == "table" then
     local handFns = {}
     for _, c in ipairs(conflicts) do handFns[c.fn] = true end
 
-    local meta = ModSynthScan.meta or {}
+    local meta = ModMixerScan.meta or {}
     log("")
     log(string.format("=== SCAN-BASED DETECTION (dataset generated %s) ===",
         tostring(meta.generated or "?")))
 
     local scanPresent, scanCatalogued, scanGameLogged, scanUncatCH = 0, 0, 0, 0
-    local SCAN_GAMELOG_CAP = 12   -- cap per-line game-log noise; full detail always in modSynth.log
-    for _, e in ipairs(ModSynthScan.entries) do
+    local SCAN_GAMELOG_CAP = 12   -- cap per-line game-log noise; full detail always in ModMixer.log
+    for _, e in ipairs(ModMixerScan.entries) do
         local presentMods = {}
         for _, m in ipairs(e.mods) do
             if present(m .. ".zip") or present(m) then
@@ -1008,17 +1007,17 @@ if type(ModSynthScan) == "table" and type(ModSynthScan.entries) == "table" then
 
     if scanUncatCH > scanGameLogged then
         logGame(string.format(
-            "[SCAN] ...and %d more uncatalogued CRITICAL/HIGH — full list in modSynth.log.",
+            "[SCAN] ...and %d more uncatalogued CRITICAL/HIGH — full list in ModMixer.log.",
             scanUncatCH - scanGameLogged))
     end
     logGame(string.format(
         "Scan-based detection: %d active conflicts (%d catalogued, %d uncatalogued); "
-     .. "%s benign INFO chains. Dataset: %s mods scanned. See modSynth.log.",
+     .. "%s benign INFO chains. Dataset: %s mods scanned. See ModMixer.log.",
         scanPresent, scanCatalogued, scanPresent - scanCatalogued,
         tostring(meta.infoChains or "?"), tostring(meta.scanned or "?")))
 else
-    log("INFO: ModSynthScan dataset not present — scan-based detection skipped. "
-     .. "Generate scripts/ms_catalogue_generated.lua via: python scan_all_hooks.py --emit-only")
+    log("INFO: ModMixerScan dataset not present — scan-based detection skipped. "
+     .. "Generate scripts/mm_catalogue_generated.lua via: python scan_all_hooks.py --emit-only")
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -1027,14 +1026,14 @@ end
 -- What actually happens (source-verified):
 --
 --   IDE (InfoDisplayExtension) installs its hook at MODULE TOP-LEVEL — during
---   normal mod load.  Registry at ModSynth load time: ide_wrapper → {prev=original}.
+--   normal mod load.  Registry at zzz_ load time: ide_wrapper → {prev=original}.
 --
 --   FH (ForestryHelper) defers its hook to Mission00.loadMission00Finished
 --   (ForestryHelper.lua line 263: "Register our overrides as late as possible").
---   So at ModSynth load time FH has NOT yet touched showSplitShapeInfo.
+--   So at zzz_ load time FH has NOT yet touched showSplitShapeInfo.
 --
 --   At map load, FH's loadMission00Finished callback fires BEFORE ours
---   (FH < ModSynth alphabetically, so FH registered first in the append chain).
+--   (FH < zzz_ alphabetically, so FH registered first in the append chain).
 --   FH wraps whatever showSplitShapeInfo is at that moment (IDE's wrapper).
 --   FH DOES call superFunc (ForestryHelper.lua line 96).
 --
@@ -1050,11 +1049,15 @@ if present("FS25_ForestryHelper.zip") and present("FS25_InfoDisplayExtension.zip
     local registry = type(Utils.__ms_registry) == "table" and Utils.__ms_registry or nil
 
     if not registry then
-        log("showSplitShapeInfo: registry unavailable (ModSynthHooks initialisation failed).")
+        if not present("FS25_000_ModMixerHooks.zip") then
+            log("showSplitShapeInfo: FS25_000_ModMixerHooks not installed — cannot verify chain.")
+        else
+            log("showSplitShapeInfo: registry unavailable (ModMixerHooks may have failed).")
+        end
     else
         -- FH defers its hook to loadMission00Finished. We must also defer our
-        -- verify/repair to fire AFTER FH's callback. ModSynth registers its
-        -- callback at mod load; FH registers first (FH < ModSynth alphabetically).
+        -- verify/repair to fire AFTER FH's callback. Because zzz_ loads last,
+        -- our appendedFunction fires after all earlier-registered callbacks.
         Mission00.loadMission00Finished = Utils.appendedFunction(
             Mission00.loadMission00Finished,
             function(mission, node)
@@ -1239,4 +1242,4 @@ log("INFO: FSCareerMissionInfo.saveToXMLFile has the largest safe chain in this 
  .. "SeasonalWoolProduction, ToggleFertilizer, UpgradeYourFactory, netWorthTracker). "
  .. "All additive, nothing lost. No action required.")
 
-logGame(string.format("=== ModSynth loaded — full report in modSynth.log ==="  ))
+logGame(string.format("=== ModMixer loaded — full report in ModMixer.log ==="  ))

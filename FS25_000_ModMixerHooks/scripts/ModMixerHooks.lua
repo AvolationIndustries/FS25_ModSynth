@@ -1,7 +1,7 @@
--- ModSynthHooks.lua  v1.0.3
--- Loaded first via extraSourceFiles ordering. Patches both Utils.overwrittenFunction and
+﻿-- ModMixerHooks.lua  v1.0.2
+-- Loads first (000_ prefix). Patches both Utils.overwrittenFunction and
 -- Utils.appendedFunction to record every wrapper in Utils.__ms_registry,
--- keyed by the returned function. ModSynth.lua reads this registry
+-- keyed by the returned function. FS25_zzz_ModMixer reads this registry
 -- to verify and repair hook chains without needing the debug library or cross-mod globals.
 --
 -- Registry entry format: { prev = existingFn, impl = newFn, kind = "overwrite"|"append" }
@@ -12,7 +12,7 @@
 
 local MSH_VERSION = "1.0.2"
 local function log(msg)
-    print(string.format("[ModSynthHooks %s] %s", MSH_VERSION, tostring(msg)))
+    print(string.format("[ModMixerHooks %s] %s", MSH_VERSION, tostring(msg)))
 end
 
 if type(Utils) ~= "table" or type(Utils.overwrittenFunction) ~= "function" then
@@ -49,7 +49,7 @@ if type(Utils.appendedFunction) == "function" then
         end
         return result
     end
-    log("Utils.overwrittenFunction + appendedFunction patched. Chain registry enabled for ModSynth.")
+    log("Utils.overwrittenFunction + appendedFunction patched. Chain registry enabled for ModMixer.")
 else
     log("Utils.overwrittenFunction patched (appendedFunction not found). Chain registry partially enabled.")
 end
