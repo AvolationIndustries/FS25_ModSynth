@@ -43,6 +43,7 @@ CAT = {"WheelPhysics":"Vehicle Physics","WheelsUtil":"Vehicle Physics","Wheel":"
  "ShopConfigScreen":"Economy","ShopItemsFrame":"Economy","ProductionPoint":"Economy","PlaceableProductionPoint":"Economy",
  "VehicleMaterial":"Visual","VehicleConfigurationItemColor":"Visual","BaseMaterial":"Visual",
  "FSBaseMission":"Game Core","Mission00":"Game Core","BaseMission":"Game Core","TypeManager":"Game Core",
+ "AIJobTypeManager":"Game Core","SavegameController":"Game Core","ItemSystem":"Economy","MotionPathEffectManager":"Visual",
  "WorkshopScreen":"Vehicle Core","InGameMenuProductionFrame":"Economy",
  "PlayerInputComponent":"UI","InGameMenuSettingsFrame":"UI","InGameMenuProductionFrame":"UI","FocusManager":"UI","BinaryOptionElement":"UI","I18N":"UI",
  "BunkerSilo":"Bunkers","Weather":"Weather","PlayerHUDUpdater":"HUD","HandToolChainsaw":"Forestry","InfoDialog":"UI",
@@ -96,12 +97,28 @@ def all_hookers(f, method_unique):
 BENIGN = re.compile(r"save|load|read|write|stream|xml|draw|register|init|finish|"
                     r"complete|persist|^update$|onCreate|delete|"
                     r"show|info|addFillUnitFillLevel", re.I)
+# FORCE_KEEP — DOMAIN conflicts the BENIGN per-instance filter wrongly swept up. These are
+# registered ONCE on their class (not re-registered per vehicle instance) and are genuine
+# user-actionable multi-mod contests. This closes the conflict-coverage gap to ~100% of
+# what MATTERS, WITHOUT re-admitting the universal-lifecycle / per-frame plumbing
+# (FSBaseMission.draw/load/..., PlayerInputComponent.*, BinaryOptionElement.update, etc.)
+# that every utility mod touches and that would re-flood the view with non-conflicts.
+FORCE_KEEP = {
+    "Farm.loadFromXMLFile", "Farm.saveToXMLFile",
+    "BunkerSilo.saveToXMLFile", "BunkerSilo.readStream", "BunkerSilo.writeStream",
+    "BunkerSilo.registerSavegameXMLPaths",
+    "FillTypeManager.loadMapData", "FruitTypeManager.loadMapData",
+    "MotionPathEffectManager.loadMapData", "AIJobTypeManager.loadMapData",
+    "ConstructionScreen.draw", "ConstructionScreen.onShowConfigs",
+    "ConstructionScreen.registerMenuActionEvents",
+    "ItemSystem.save", "SavegameController.onSaveComplete",
+}
 discovered, dropped = set(), []
 for f in set(owm)|set(apm):
     if f in CURATED: continue
     tot=len(owm[f]|apm[f]); nov=len(owm[f])
     if not (2<=tot<=CAP): continue
-    if BENIGN.search(f.split(".",1)[1]):
+    if BENIGN.search(f.split(".",1)[1]) and f not in FORCE_KEEP:
         dropped.append(f); continue                     # plumbing / per-instance hot fn
     discovered.add(f)                                   # overwrite- OR append-bearing
 targets = sorted(set(CURATED)|discovered)

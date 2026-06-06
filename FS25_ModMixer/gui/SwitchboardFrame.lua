@@ -338,6 +338,9 @@ local function helpForRow(row)
     elseif rt == "reviewIncompat" then
         return "INCOMPATIBLE \226\128\148 these mods replace the same system and can't coexist cleanly. "
             .. "Keep only one installed. Dismiss (Space) to hide."
+    elseif rt == "reviewRestore" then
+        return "RESTORE \226\128\148 un-dismiss everything you've hidden in this tab. Handy if you dismissed "
+            .. "rows before reading them. Brings them all back instantly."
     elseif rt == "reviewInfo" then
         return row.featureLabel or ""
     end
@@ -1222,13 +1225,12 @@ function ModMixerSwitchboardFrame:collectReviewRows()
             modLabel = "(review data unavailable)", featureLabel = "", stateText = "" }
         return rows
     end
-    local red, inc, hud = {}, {}, {}
+    local red, inc, hud, dismissedCount = {}, {}, {}, 0
     for _, it in ipairs(SB.buildReviewItems()) do
-        if not it.dismissed then
-            if     it.rkind == "redundancy"  then red[#red + 1] = it
-            elseif it.rkind == "incompatible" then inc[#inc + 1] = it
-            elseif it.rkind == "hud"          then hud[#hud + 1] = it end
-        end
+        if it.dismissed then dismissedCount = dismissedCount + 1
+        elseif it.rkind == "redundancy"   then red[#red + 1] = it
+        elseif it.rkind == "incompatible" then inc[#inc + 1] = it
+        elseif it.rkind == "hud"          then hud[#hud + 1] = it end
     end
     local total = #red + #inc + #hud
 
@@ -1239,6 +1241,16 @@ function ModMixerSwitchboardFrame:collectReviewRows()
             #red, #inc, #hud),
         stateText = (total == 0 and "all clear / dismissed" or "select a row \226\134\146 details"),
     }
+    -- Undo: a VISIBLE restore row whenever anything's been dismissed (no hidden combo —
+    -- this is the "I tapped 12 before reading them" escape hatch).
+    if dismissedCount > 0 then
+        rows[#rows + 1] = {
+            rowType = "reviewRestore", category = "Review",
+            modLabel = "\226\134\186  Restore " .. dismissedCount .. " dismissed",
+            featureLabel = "bring back everything you've hidden in this tab",
+            stateText = "Restore all",
+        }
+    end
 
     if #red > 0 then
         table.sort(red, function(a, b)
@@ -1587,6 +1599,13 @@ function ModMixerSwitchboardFrame:onActivate()
     if row.rowType == "reviewRedundancy" or row.rowType == "reviewIncompat"
        or row.rowType == "reviewHud" then
         if SB.dismissReview ~= nil and row.reviewKey ~= nil then SB.dismissReview(row.reviewKey, true) end
+        self:refresh()
+        self:setMenuButtonInfoDirty()
+        return
+    end
+    -- Review tier: undo all dismissals (the restore row).
+    if row.rowType == "reviewRestore" then
+        if SB.clearReviewDismissals ~= nil then SB.clearReviewDismissals() end
         self:refresh()
         self:setMenuButtonInfoDirty()
         return
