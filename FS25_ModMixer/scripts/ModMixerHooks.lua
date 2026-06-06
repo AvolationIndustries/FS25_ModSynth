@@ -71,16 +71,20 @@ Utils.__ms_trampTargets = {}   -- [trampolineFn] = target  (so a re-hook of a re
 -- Curated TARGET functions to name (and allow vetoing). Bounded list — NOT every
 -- method of a class (a metatable __index can lead into a huge shared table and
 -- over-name). Grow from the conflict catalogue as needed.
+-- NOTE: pruned 2026-06-06 — entries whose CLASS resolves but METHOD never does in FS25
+-- (confirmed dead by the snapshot "never resolved" audit): WheelPhysics.updateWheelFriction,
+-- WheelsUtil.updateWheelsPhysicsGroundContact, Motorized.getMaxPtoRpm,
+-- Motorized.getUseAutomaticGearShifting/getUseAutomaticGroupShifting, Vehicle.onUpdate,
+-- Wearable.setOperatingTime. They were FS22 names / guesses that matched nothing.
 local TARGETS = {
     "WheelPhysics.serverUpdate", "WheelPhysics.finalize", "WheelPhysics.updatePhysics",
-    "WheelPhysics.updateTireFriction", "WheelPhysics.updateFriction", "WheelPhysics.updateWheelFriction",
+    "WheelPhysics.updateTireFriction", "WheelPhysics.updateFriction",
     "WheelPhysics.updateContact",
-    "WheelsUtil.updateWheelsPhysics", "WheelsUtil.updateWheelsPhysicsGroundContact",
+    "WheelsUtil.updateWheelsPhysics",
     "WheelsUtil.getSmoothedAcceleratorAndBrakePedals",
     "Drivable.updateVehiclePhysics",
-    "Motorized.updateConsumers", "Motorized.onUpdate", "Motorized.getMaxPtoRpm",
-    "Motorized.getUseAutomaticGearShifting", "Motorized.getUseAutomaticGroupShifting",
-    "Vehicle.update", "Vehicle.updateTick", "Vehicle.onUpdate", "Vehicle.load", "Vehicle.getSpeedLimit",
+    "Motorized.updateConsumers", "Motorized.onUpdate",
+    "Vehicle.update", "Vehicle.updateTick", "Vehicle.load", "Vehicle.getSpeedLimit",
     "FSBaseMission.update", "FSBaseMission.sendInitialClientState", "FSBaseMission.onConnectionFinishedLoading",
     "Sprayer.processSprayerArea", "Cutter.onEndWorkAreaProcessing",
     "BunkerSilo.update", "BunkerSilo.load", "BunkerSilo.loadFromXMLFile",
@@ -90,7 +94,7 @@ local TARGETS = {
     "PlaceableProductionPoint.onFinalizePlacement", "ProductionPoint.load",
     "DensityMapHeightManager.loadMapData", "Weather.update",
     -- Damage / Wear — vehicle-health fns damage overhauls (ADS) overwrite via specs.
-    "Wearable.updateDamageAmount", "Wearable.setOperatingTime",
+    "Wearable.updateDamageAmount",
     "Motorized.getCanMotorRun", "Motorized.startMotor", "Motorized.updateMotorTemperature",
     "Vehicle.getSellPrice",
 }
@@ -105,31 +109,52 @@ local function safeGlobal(name)
 end
 
 local _snapped = false
+local _pending = nil     -- TARGET strings whose class/method wasn't defined at first snapshot
+local _sealed  = false   -- stop retrying once the map is fully loaded (post loadMission00Finished)
+
+-- Returns true once the target is named (or is unnameable garbage), false if its class or
+-- method isn't available YET — so the caller keeps it pending and retries on a later hook.
 local function snapshotOne(qualified)
     local class, method = string.match(qualified, "^([^.]+)%.(.+)$")
-    if class ~= nil and method ~= nil then
-        local C = safeGlobal(class)
-        if type(C) == "table" then
-            local fn = C[method]   -- non-raw read: resolves inherited methods too
-            if type(fn) == "function" and Utils.__ms_fnNames[fn] == nil then
-                Utils.__ms_fnNames[fn] = qualified
-            end
-        end
-    end
+    if class == nil or method == nil then return true end
+    local C = safeGlobal(class)
+    if type(C) ~= "table" then return false end          -- class not defined yet → pending
+    local fn = C[method]                                  -- non-raw read: resolves inherited too
+    if type(fn) ~= "function" then return false end       -- method not present yet → pending
+    if Utils.__ms_fnNames[fn] == nil then Utils.__ms_fnNames[fn] = qualified end
+    return true
 end
 local function buildNameMap()
+    _pending = {}
+    local function consider(q)
+        if not snapshotOne(q) then _pending[#_pending + 1] = q end
+    end
     -- Curated core (hardcoded above = guaranteed even if the dataset is missing) …
-    for _, q in ipairs(TARGETS) do snapshotOne(q) end
+    for _, q in ipairs(TARGETS) do consider(q) end
     -- … plus the WIDER net: discovered conflict targets from the bundled dataset
     -- (tools/gen_targets.py — every Class.method 2+ mods overwrite in this install).
     if type(ModMixerTargets) == "table" then
-        for _, q in ipairs(ModMixerTargets) do snapshotOne(q) end
+        for _, q in ipairs(ModMixerTargets) do consider(q) end
     end
 end
+-- One-shot first pass, then RE-TRY the still-unresolved targets on each later hook. Some
+-- engine classes — notably HUD/GUI tables like GameInfoDisplay — are defined AFTER our
+-- first snapshot, so their ORIGINAL fn must be captured the moment the class appears and
+-- before a mod wraps it. Retrying here (patched() calls this BEFORE resolving the target)
+-- means even the FIRST mod to hook a late class still gets named: we snapshot C.method,
+-- which == that hook's existingFn, just-in-time. Self-terminating: stops the moment
+-- _pending empties, and is sealed after map load so never-present classes cost nothing.
 local function ensureSnapshot()
-    if _snapped then return end
-    _snapped = true
-    pcall(buildNameMap)
+    if not _snapped then
+        _snapped = true
+        pcall(buildNameMap)
+    elseif not _sealed and _pending ~= nil and #_pending > 0 then
+        local still = {}
+        for _, q in ipairs(_pending) do
+            if not snapshotOne(q) then still[#still + 1] = q end
+        end
+        _pending = still
+    end
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -771,6 +796,12 @@ if Mission00 ~= nil and type(Mission00.loadMission00Finished) == "function" and 
     -- pcall wrapper: coverageLog is diagnostic only — an error here must NEVER
     -- propagate into loadMission00Finished and hang the load sequence.
     Mission00.loadMission00Finished = _orig_append(Mission00.loadMission00Finished, function(...)
+        ensureSnapshot()           -- final retry pass for any late-defined classes
+        if _pending ~= nil and #_pending > 0 then
+            log(string.format("snapshot: %d target(s) never resolved (class absent in this "
+                .. "install): %s", #_pending, table.concat(_pending, ", ")))
+        end
+        _sealed = true             -- everything that will exist is defined now; stop retrying
         local ok, err = pcall(coverageLog)
         if not ok then log("coverageLog error (non-fatal): " .. tostring(err)) end
     end)

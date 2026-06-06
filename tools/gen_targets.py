@@ -12,12 +12,11 @@ OUT = r"B:/Farm Sim Mod Dev/FS25_ModMixer/FS25_ModMixer/scripts/mm_hookmap_gener
 CAP = 8   # max chain length for a DISCOVERED target (bigger = benign registration point)
 
 CURATED = ["WheelPhysics.serverUpdate","WheelPhysics.finalize","WheelPhysics.updatePhysics",
- "WheelPhysics.updateTireFriction","WheelPhysics.updateFriction","WheelPhysics.updateWheelFriction",
- "WheelPhysics.updateContact","WheelsUtil.updateWheelsPhysics","WheelsUtil.updateWheelsPhysicsGroundContact",
+ "WheelPhysics.updateTireFriction","WheelPhysics.updateFriction",
+ "WheelPhysics.updateContact","WheelsUtil.updateWheelsPhysics",
  "WheelsUtil.getSmoothedAcceleratorAndBrakePedals","Drivable.updateVehiclePhysics",
- "Motorized.updateConsumers","Motorized.onUpdate","Motorized.getMaxPtoRpm",
- "Motorized.getUseAutomaticGearShifting","Motorized.getUseAutomaticGroupShifting",
- "Vehicle.update","Vehicle.updateTick","Vehicle.onUpdate","Vehicle.load","Vehicle.getSpeedLimit",
+ "Motorized.updateConsumers","Motorized.onUpdate",
+ "Vehicle.update","Vehicle.updateTick","Vehicle.load","Vehicle.getSpeedLimit",
  "FSBaseMission.update","FSBaseMission.sendInitialClientState","FSBaseMission.onConnectionFinishedLoading",
  "Sprayer.processSprayerArea","Cutter.onEndWorkAreaProcessing",
  "Mulcher.onEndWorkAreaProcessing","Tedder.onEndWorkAreaProcessing","Windrower.onEndWorkAreaProcessing",
@@ -25,11 +24,12 @@ CURATED = ["WheelPhysics.serverUpdate","WheelPhysics.finalize","WheelPhysics.upd
  "Cultivator.onEndWorkAreaProcessing","Plow.onEndWorkAreaProcessing","SowingMachine.onEndWorkAreaProcessing",
  "BunkerSilo.update","BunkerSilo.load","BunkerSilo.loadFromXMLFile",
  "PlayerHUDUpdater.showSplitShapeInfo","PlayerHUDUpdater.showFieldInfo",
+ "GameInfoDisplay.draw",
  "ConstructionBrush.verifyAccess","Farm.changeBalance","InfoDialog.show",
  "VehicleMaterial.apply","VehicleMaterial.applyToVehicle",
  "PlaceableProductionPoint.onFinalizePlacement","ProductionPoint.load",
  "DensityMapHeightManager.loadMapData","Weather.update",
- "Wearable.updateDamageAmount","Wearable.setOperatingTime","Motorized.getCanMotorRun",
+ "Wearable.updateDamageAmount","Motorized.getCanMotorRun",
  "Motorized.startMotor","Motorized.updateMotorTemperature","Vehicle.getSellPrice"]
 
 CAT = {"WheelPhysics":"Vehicle Physics","WheelsUtil":"Vehicle Physics","Wheel":"Vehicle Physics","Drivable":"Vehicle Physics",
@@ -45,7 +45,8 @@ CAT = {"WheelPhysics":"Vehicle Physics","WheelsUtil":"Vehicle Physics","Wheel":"
  "FSBaseMission":"Game Core","Mission00":"Game Core","BaseMission":"Game Core","TypeManager":"Game Core",
  "WorkshopScreen":"Vehicle Core","InGameMenuProductionFrame":"Economy",
  "PlayerInputComponent":"UI","InGameMenuSettingsFrame":"UI","InGameMenuProductionFrame":"UI","FocusManager":"UI","BinaryOptionElement":"UI","I18N":"UI",
- "BunkerSilo":"Bunkers","Weather":"Weather","PlayerHUDUpdater":"HUD","HandToolChainsaw":"Forestry","InfoDialog":"UI"}
+ "BunkerSilo":"Bunkers","Weather":"Weather","PlayerHUDUpdater":"HUD","HandToolChainsaw":"Forestry","InfoDialog":"UI",
+ "GameInfoDisplay":"HUD","HUD":"HUD"}
 
 def pretty(method):
     s = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', method)

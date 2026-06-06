@@ -597,13 +597,24 @@ local function doLoad()
         wj = wj + 1
     end
 
+    local loadedDismissed = {}
+    local dj = 0
+    while true do
+        local dk = getXMLString(xml, string.format("switchboard.reviewDismissed.item(%d)#key", dj))
+        if dk == nil then break end
+        loadedDismissed[dk] = true
+        dj = dj + 1
+    end
+
     delete(xml)
     SB.overrides = loaded
     SB.vetoes = loadedVetoes
     SB.reorders = loadedReorders
+    SB.reviewDismissed = loadedDismissed
     -- migrate the older two-mode value ("basic" → "seating")
     if loadedMode == "basic" then loadedMode = "seating" end
-    if loadedMode == "seating" or loadedMode == "category" or loadedMode == "advanced" then
+    if loadedMode == "seating" or loadedMode == "category" or loadedMode == "advanced"
+       or loadedMode == "review" then
         SB.mode = loadedMode
     end
     SB.priorityGlobal = loadedPriority
@@ -698,6 +709,14 @@ local function doSave()
         setXMLString(xml, wk .. "#target", target)
         setXMLString(xml, wk .. "#mod", mod)
         wi = wi + 1
+    end
+
+    local di = 0
+    for key, on in pairs(SB.reviewDismissed or {}) do
+        if on then
+            setXMLString(xml, string.format("switchboard.reviewDismissed.item(%d)#key", di), key)
+            di = di + 1
+        end
     end
 
     saveXMLFile(xml)
@@ -932,9 +951,9 @@ end
 -- TIERED RESOLUTION API  (Seating / Category / Advanced)
 -- ─────────────────────────────────────────────────────────────────────────────
 
-local MODE_CYCLE = { seating = "category", category = "advanced", advanced = "seating" }
+local MODE_CYCLE = { seating = "category", category = "advanced", advanced = "review", review = "seating" }
 function SB.setMode(m)
-    if m ~= "seating" and m ~= "category" and m ~= "advanced" then m = "seating" end
+    if m ~= "seating" and m ~= "category" and m ~= "advanced" and m ~= "review" then m = "seating" end
     SB.mode = m
     SB.save()
 end
@@ -1028,6 +1047,79 @@ function SB.buildConflicts()
         end
     end
     return conflicts
+end
+
+-- ── REVIEW HUB ───────────────────────────────────────────────────────────────
+-- The "things worth a look" dashboard, assembled from three sources:
+--   • redundancy  — duplicate-PURPOSE candidates from the offline scan (name + hook
+--                   signals) carrying each mod's modDesc description so the player can
+--                   judge at a glance. Advisory only.
+--   • incompatible— remove-one pairs (two mods replacing the same system).
+--   • hud         — mods that both draw the same HUD strip. The honest STOMP model calls
+--                   these "shared" (both run), but the player still SEES them collide
+--                   (e.g. the weather HUD vanishing), so we surface them here to decide.
+-- Nothing is auto-changed. The player dismisses items they've judged; dismissals persist.
+SB.reviewDismissed = SB.reviewDismissed or {}   -- [key] = true
+
+function SB.dismissReview(key, on)
+    if key == nil then return end
+    if on == false then SB.reviewDismissed[key] = nil else SB.reviewDismissed[key] = true end
+    SB.save()
+end
+function SB.clearReviewDismissals()
+    SB.reviewDismissed = {}
+    SB.save()
+end
+
+function SB.buildReviewItems()
+    local items = {}
+    -- 1) Redundancy candidates (offline detector: name/hook signals + modDesc descriptions)
+    local red = safeGlobal("ModMixerRedundancy")
+    if type(red) == "table" then
+        for _, p in ipairs(red) do
+            if type(p) == "table" and p.a ~= nil and p.b ~= nil then
+                local key = "red|" .. tostring(p.a) .. "|" .. tostring(p.b)
+                items[#items + 1] = {
+                    rkind = "redundancy", key = key, dismissed = SB.reviewDismissed[key] == true,
+                    a = p.a, b = p.b, confidence = p.confidence or "low",
+                    descA = p.descA or "", descB = p.descB or "",
+                    nameTokens = p.nameTokens, sharedFns = p.sharedFns, descOverlap = p.descOverlap,
+                }
+            end
+        end
+    end
+    -- 2) Incompatible remove-one pairs (from the live conflict model — these come from the
+    --    curated ModMixerIncompatible list, not from runtime hook attribution, so reliable).
+    local conflicts = (type(SB.buildConflicts) == "function") and SB.buildConflicts() or {}
+    for _, c in ipairs(conflicts) do
+        if c.kind == "incompatible" and type(c.mods) == "table" then
+            local key = "inc|" .. table.concat(c.mods, "|")
+            items[#items + 1] = {
+                rkind = "incompatible", key = key, dismissed = SB.reviewDismissed[key] == true,
+                mods = c.mods, reason = c.reason,
+            }
+        end
+    end
+    -- 3) HUD / visual overlaps — sourced OFFLINE from the bundled hookmap, NOT live
+    --    attribution. Two+ installed mods that both draw the same HUD element collide
+    --    visually even though the chain technically runs both (e.g. a vanished weather
+    --    panel). The interceptor can't name HUD-class hooks at runtime (the class loads
+    --    after our snapshot), so the offline hookmap is the reliable source here.
+    local hookmap = safeGlobal("ModMixerHookMap")
+    if type(hookmap) == "table" then
+        local HUD_CLASS = { GameInfoDisplay = true, HUD = true, PlayerHUDUpdater = true }
+        for target, mods in pairs(hookmap) do
+            local cls = string.match(target, "^([^.]+)%.")
+            if cls ~= nil and HUD_CLASS[cls] and type(mods) == "table" and #mods >= 2 then
+                local key = "hud|" .. target
+                items[#items + 1] = {
+                    rkind = "hud", key = key, dismissed = SB.reviewDismissed[key] == true,
+                    target = target, mods = mods,
+                }
+            end
+        end
+    end
+    return items
 end
 
 -- First mod in `order` that's among `mods` (= the highest-priority present contestant).

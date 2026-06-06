@@ -326,6 +326,20 @@ local function helpForRow(row)
         return "Live read-only state of your current vehicle (updates ~2x/sec). Wheel rows show "
             .. "MoreRealistic's computed per-wheel grip / load / rolling-resistance \226\128\148 compare LEFT "
             .. "vs RIGHT to spot a veer, or watch the Grip spread row."
+    elseif rt == "reviewRedundancy" then
+        local a = "A: " .. (row.descA ~= nil and row.descA ~= "" and row.descA or "(no description)")
+        local b = "B: " .. (row.descB ~= nil and row.descB ~= "" and row.descB or "(no description)")
+        return "POSSIBLE DUPLICATE \226\128\148 two mods may do the same job. Read both; keep one if so. "
+            .. "Dismiss (Space) if they're actually different.\n" .. a .. "\n" .. b
+    elseif rt == "reviewHud" then
+        return "HUD OVERLAP \226\128\148 these mods all draw the same HUD area, so they can collide visually "
+            .. "(e.g. a vanished weather panel). ModMixer can't mute HUD draws \226\128\148 if one misbehaves, "
+            .. "remove that mod. Dismiss (Space) to hide.\n[" .. (row.target or "") .. "]"
+    elseif rt == "reviewIncompat" then
+        return "INCOMPATIBLE \226\128\148 these mods replace the same system and can't coexist cleanly. "
+            .. "Keep only one installed. Dismiss (Space) to hide."
+    elseif rt == "reviewInfo" then
+        return row.featureLabel or ""
     end
     return DEFAULT_HELP
 end
@@ -335,6 +349,7 @@ local TIER_LEGEND = {
     seating  = "SIMPLE \226\128\148 rank your mods; a higher seat wins its conflicts everywhere. Switch View top-left.",
     category = "BY CATEGORY \226\128\148 settle one realm at a time. Change winner picks a fight; Promote/Move ranks within the realm; shared stacks all run.",
     advanced = "ADVANCED \226\128\148 #/# = firing position; [ow] overwrites (wraps inner); [ow!] may STOMP inner mods. Move reorders (restart). Make-Winner mutes others (restart).",
+    review   = "REVIEW \226\128\148 things worth a look: duplicate-purpose mods, incompatible pairs, HUD overlaps. Select a row for the evidence; Dismiss (Space) hides ones you've judged.",
 }
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -385,8 +400,9 @@ function ModMixerSwitchboardFrame:updateChrome()
         pcall(function() self.headerInfo:setText(TIER_LEGEND[mode] or "") end)
     end
     if self.tierSwitch ~= nil then
-        local idx = (mode == "seating" and 1) or (mode == "category" and 2) or 3
-        pcall(function() self.tierSwitch:setTexts({ "Simple", "By category", "Advanced" }) end)
+        local idx = (mode == "seating" and 1) or (mode == "category" and 2)
+                 or (mode == "advanced" and 3) or 4
+        pcall(function() self.tierSwitch:setTexts({ "Simple", "By category", "Advanced", "Review" }) end)
         pcall(function() self.tierSwitch:setState(idx, false) end)
     end
 end
@@ -395,7 +411,8 @@ end
 function ModMixerSwitchboardFrame:onTierSwitchChanged(state)
     local s = state
     if type(s) ~= "number" and self.tierSwitch ~= nil then s = self.tierSwitch:getState() end
-    local mode = (s == 1 and "seating") or (s == 2 and "category") or "advanced"
+    local mode = (s == 1 and "seating") or (s == 2 and "category")
+              or (s == 3 and "advanced") or "review"
     if ModMixerSwitchboard ~= nil and ModMixerSwitchboard.setMode ~= nil then
         ModMixerSwitchboard.setMode(mode)
     end
@@ -944,8 +961,8 @@ end
 
 -- The three tiers, and the mode-toggle row that shows the current tier + what SPACE
 -- switches to next (seating → category → advanced → seating).
-local TIER_NAME = { seating = "Simple",        category = "By category",  advanced = "Advanced" }
-local TIER_NEXT = { seating = "category",       category = "advanced",     advanced = "seating" }
+local TIER_NAME = { seating = "Simple",  category = "By category", advanced = "Advanced", review = "Review" }
+local TIER_NEXT = { seating = "category", category = "advanced",   advanced = "review",   review = "seating" }
 local TIER_DESC = { seating = "rank your mods \226\128\148 higher wins everywhere",
                     category = "settle conflicts within each realm",
                     advanced = "full hook chains & manual control" }
@@ -1132,8 +1149,8 @@ function ModMixerSwitchboardFrame:rebuildFilterCats()
     -- Basic mode pages by the same switcher, over its own categories (King Pins +
     -- fight categories + Incompatible).
     local sbMode = ModMixerSwitchboard ~= nil and ModMixerSwitchboard.mode or "advanced"
-    -- Tier 1 (Seating): single page, no category pager.
-    if sbMode == "seating" then
+    -- Tier 1 (Seating) & Tier 4 (Review): single page, no category pager.
+    if sbMode == "seating" or sbMode == "review" then
         self.filterCats = {}
         if self.categoryFilter ~= nil then pcall(function() self.categoryFilter:setVisible(false) end) end
         return
@@ -1192,8 +1209,90 @@ function ModMixerSwitchboardFrame:rebuildFilterCats()
 end
 
 -- Build the displayed rows: filter by active category, sort, insert headers.
+-- TIER 4 (Review): the "worth a look" hub — possible duplicate-purpose mods, incompatible
+-- pairs, and HUD overlaps. Advisory: select a row to read the evidence in the help box,
+-- Dismiss (Space) to hide ones you've judged. Sourced from the OFFLINE detectors so it
+-- works even where live attribution can't (HUD-class hooks).
+function ModMixerSwitchboardFrame:collectReviewRows()
+    local SB = ModMixerSwitchboard
+    local rows = {}
+    if SB == nil or SB.buildReviewItems == nil then
+        basicHeader(rows, "Review")
+        rows[#rows + 1] = { rowType = "reviewInfo", category = "Review",
+            modLabel = "(review data unavailable)", featureLabel = "", stateText = "" }
+        return rows
+    end
+    local red, inc, hud = {}, {}, {}
+    for _, it in ipairs(SB.buildReviewItems()) do
+        if not it.dismissed then
+            if     it.rkind == "redundancy"  then red[#red + 1] = it
+            elseif it.rkind == "incompatible" then inc[#inc + 1] = it
+            elseif it.rkind == "hud"          then hud[#hud + 1] = it end
+        end
+    end
+    local total = #red + #inc + #hud
+
+    basicHeader(rows, "Review")
+    rows[#rows + 1] = {
+        rowType = "reviewInfo", category = "Review", modLabel = "Worth a look",
+        featureLabel = string.format("%d possible duplicate(s), %d incompatible, %d HUD overlap(s)",
+            #red, #inc, #hud),
+        stateText = (total == 0 and "all clear / dismissed" or "select a row \226\134\146 details"),
+    }
+
+    if #red > 0 then
+        table.sort(red, function(a, b)
+            local ca = (a.confidence == "high" and 2) or (a.confidence == "med" and 1) or 0
+            local cb = (b.confidence == "high" and 2) or (b.confidence == "med" and 1) or 0
+            if ca ~= cb then return ca > cb end
+            return (a.descOverlap or 0) > (b.descOverlap or 0)
+        end)
+        basicHeader(rows, "Possible duplicates")
+        for _, it in ipairs(red) do
+            rows[#rows + 1] = {
+                rowType = "reviewRedundancy", category = "Review", reviewKey = it.key,
+                modLabel = prettyMod(it.a) .. "  \226\159\183  " .. prettyMod(it.b),
+                featureLabel = (it.confidence == "high" and "likely duplicate") or "review",
+                stateText = "Dismiss", descA = it.descA or "", descB = it.descB or "",
+            }
+        end
+    end
+    if #inc > 0 then
+        basicHeader(rows, "Incompatible \226\128\148 keep one")
+        for _, it in ipairs(inc) do
+            local names = {}
+            for _, m in ipairs(it.mods) do names[#names + 1] = prettyMod(m) end
+            rows[#rows + 1] = {
+                rowType = "reviewIncompat", category = "Review", reviewKey = it.key,
+                modLabel = "\226\156\151  " .. table.concat(names, "  +  "),
+                featureLabel = it.reason or "replace the same system", stateText = "Dismiss",
+            }
+        end
+    end
+    if #hud > 0 then
+        basicHeader(rows, "HUD overlaps")
+        for _, it in ipairs(hud) do
+            local names = {}
+            for _, m in ipairs(it.mods) do names[#names + 1] = prettyMod(m) end
+            rows[#rows + 1] = {
+                rowType = "reviewHud", category = "Review", reviewKey = it.key, target = it.target,
+                modLabel = table.concat(names, "  +  "),
+                featureLabel = "both draw " .. (it.target or "a HUD element"), stateText = "Dismiss",
+            }
+        end
+    end
+    if total == 0 then
+        rows[#rows + 1] = { rowType = "reviewInfo", category = "Review",
+            modLabel = "(nothing to review)",
+            featureLabel = "no duplicates, incompatibilities or HUD overlaps outstanding", stateText = "" }
+    end
+    return rows
+end
+
 function ModMixerSwitchboardFrame:buildRows()
     local sbMode = ModMixerSwitchboard ~= nil and ModMixerSwitchboard.mode or "advanced"
+
+    if sbMode == "review" then return self:collectReviewRows() end
 
     -- Tiers 1 & 2 (Seating / Category) share the same sort + header machinery; they only
     -- differ in which collector feeds them and whether the category pager filters.
@@ -1483,6 +1582,16 @@ function ModMixerSwitchboardFrame:onActivate()
 
     -- Tiered rows + the mode toggle (works in every tier).
     if row.rowType == "modeToggle" then self:onModeSwitched(); return end
+
+    -- Review tier: Space dismisses an item you've judged (persisted).
+    if row.rowType == "reviewRedundancy" or row.rowType == "reviewIncompat"
+       or row.rowType == "reviewHud" then
+        if SB.dismissReview ~= nil and row.reviewKey ~= nil then SB.dismissReview(row.reviewKey, true) end
+        self:refresh()
+        self:setMenuButtonInfoDirty()
+        return
+    end
+    if row.rowType == "reviewInfo" then return end
     if row.rowType == "basicFight" then self:cycleFightWinner(row); return end
     if row.rowType == "basicPriority" or row.rowType == "catPriority" then
         self:onMoveHook(-1); return   -- SPACE = promote

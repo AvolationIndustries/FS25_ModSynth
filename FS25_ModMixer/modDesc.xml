@@ -112,6 +112,7 @@ Par Avolation Industries.
         <sourceFile filename="scripts/ModMixerHooks.lua"/>
         <sourceFile filename="scripts/mm_catalogue_generated.lua"/>
         <sourceFile filename="scripts/mm_hookmap_generated.lua"/>
+        <sourceFile filename="scripts/mm_redundancy_generated.lua"/>
         <sourceFile filename="scripts/ModMixer.lua"/>
         <sourceFile filename="scripts/Switchboard.lua"/>
         <sourceFile filename="gui/SwitchboardFrame.lua"/>
