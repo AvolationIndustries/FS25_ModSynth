@@ -338,6 +338,10 @@ local function helpForRow(row)
     elseif rt == "reviewIncompat" then
         return "INCOMPATIBLE \226\128\148 these mods replace the same system and can't coexist cleanly. "
             .. "Keep only one installed. Dismiss (Space) to hide."
+    elseif rt == "reviewOrphan" then
+        return "ORPHANED SETTINGS \226\128\148 this config in modSettings/ belongs to a mod that is NO LONGER "
+            .. "installed. Reinstall the mod to use it, or delete the file from modSettings/ to tidy up "
+            .. "(ModMixer can't delete it \226\128\148 deleteFile is a no-op in-game). Dismiss (Space) to hide."
     elseif rt == "reviewRestore" then
         return "RESTORE \226\128\148 un-dismiss everything you've hidden in this tab. Handy if you dismissed "
             .. "rows before reading them. Brings them all back instantly."
@@ -533,6 +537,20 @@ function ModMixerSwitchboardFrame:getMenuButtonInfo()
     if row ~= nil and (row.rowType == "basicIncompat" or row.rowType == "basicInfo"
                        or row.rowType == "basicShared") then
         return { self.btnBack, unpack(extras) }   -- info only
+    end
+
+    -- Review tier rows: Space = Dismiss / Restore (no reset/veto clutter).
+    if row ~= nil and (row.rowType == "reviewRedundancy" or row.rowType == "reviewIncompat"
+                       or row.rowType == "reviewHud" or row.rowType == "reviewOrphan") then
+        self.btnActivate.text = "Dismiss"
+        return { self.btnBack, self.btnActivate }
+    end
+    if row ~= nil and row.rowType == "reviewRestore" then
+        self.btnActivate.text = "Restore all"
+        return { self.btnBack, self.btnActivate }
+    end
+    if row ~= nil and row.rowType == "reviewInfo" then
+        return { self.btnBack }   -- info only
     end
 
     if row == nil or row.rowType == "header" or row.rowType == "vehicleState" then
@@ -1225,20 +1243,21 @@ function ModMixerSwitchboardFrame:collectReviewRows()
             modLabel = "(review data unavailable)", featureLabel = "", stateText = "" }
         return rows
     end
-    local red, inc, hud, dismissedCount = {}, {}, {}, 0
+    local red, inc, hud, orph, dismissedCount = {}, {}, {}, {}, 0
     for _, it in ipairs(SB.buildReviewItems()) do
         if it.dismissed then dismissedCount = dismissedCount + 1
         elseif it.rkind == "redundancy"   then red[#red + 1] = it
         elseif it.rkind == "incompatible" then inc[#inc + 1] = it
-        elseif it.rkind == "hud"          then hud[#hud + 1] = it end
+        elseif it.rkind == "hud"          then hud[#hud + 1] = it
+        elseif it.rkind == "orphan"       then orph[#orph + 1] = it end
     end
-    local total = #red + #inc + #hud
+    local total = #red + #inc + #hud + #orph
 
     basicHeader(rows, "Review")
     rows[#rows + 1] = {
         rowType = "reviewInfo", category = "Review", modLabel = "Worth a look",
-        featureLabel = string.format("%d possible duplicate(s), %d incompatible, %d HUD overlap(s)",
-            #red, #inc, #hud),
+        featureLabel = string.format("%d duplicate(s), %d incompatible, %d HUD, %d orphaned setting(s)",
+            #red, #inc, #hud, #orph),
         stateText = (total == 0 and "all clear / dismissed" or "select a row \226\134\146 details"),
     }
     -- Undo: a VISIBLE restore row whenever anything's been dismissed (no hidden combo —
@@ -1293,10 +1312,20 @@ function ModMixerSwitchboardFrame:collectReviewRows()
             }
         end
     end
+    if #orph > 0 then
+        basicHeader(rows, "Orphaned settings \226\128\148 mod not installed")
+        for _, it in ipairs(orph) do
+            rows[#rows + 1] = {
+                rowType = "reviewOrphan", category = "Review", reviewKey = it.key,
+                modLabel = "\226\154\160  " .. (it.entry or "?"),
+                featureLabel = "config left by an uninstalled mod", stateText = "Dismiss",
+            }
+        end
+    end
     if total == 0 then
         rows[#rows + 1] = { rowType = "reviewInfo", category = "Review",
             modLabel = "(nothing to review)",
-            featureLabel = "no duplicates, incompatibilities or HUD overlaps outstanding", stateText = "" }
+            featureLabel = "no duplicates, incompatibilities, HUD overlaps or orphaned settings", stateText = "" }
     end
     return rows
 end
@@ -1597,7 +1626,7 @@ function ModMixerSwitchboardFrame:onActivate()
 
     -- Review tier: Space dismisses an item you've judged (persisted).
     if row.rowType == "reviewRedundancy" or row.rowType == "reviewIncompat"
-       or row.rowType == "reviewHud" then
+       or row.rowType == "reviewHud" or row.rowType == "reviewOrphan" then
         if SB.dismissReview ~= nil and row.reviewKey ~= nil then SB.dismissReview(row.reviewKey, true) end
         self:refresh()
         self:setMenuButtonInfoDirty()

@@ -1071,6 +1071,54 @@ function SB.clearReviewDismissals()
     SB.save()
 end
 
+-- ORPHANED SETTINGS — modSettings/ entries whose mod is no longer installed (the method
+-- that cracked the SeasonalCropStress HUD hunt, made a feature). RUNTIME-only: it's the
+-- PLAYER's modSettings vs THEIR installed mods, so it can't be precomputed offline.
+-- Normalise both sides (drop FS25_/FS22_ prefix + 0_/zzz_ load brackets + .xml) so e.g.
+-- the `FS25_ModMixer` settings folder matches the installed `FS25_0_ModMixer`.
+local function _normMod(s)
+    s = tostring(s):gsub("%.xml$", "")
+    s = s:gsub("^FS25_", ""):gsub("^FS22_", ""):gsub("^LS25_", ""):gsub("^LS22_", "")
+    s = s:gsub("^0+_", ""):gsub("^z+_", "")
+    return (s:lower())
+end
+
+local _orphanCollector = { entries = nil }
+function _orphanCollector:onEntry(filename, _isDirectory)
+    if filename == nil or filename == "." or filename == ".." then return end
+    self.entries[#self.entries + 1] = filename
+end
+
+SB._orphanScan = nil   -- cached (scan once per session)
+function SB.scanOrphanedSettings()
+    if SB._orphanScan ~= nil then return SB._orphanScan end
+    local result = {}
+    SB._orphanScan = result
+    if type(getUserProfileAppPath) ~= "function" or type(getFiles) ~= "function"
+       or g_modManager == nil then return result end
+    -- normalised set of installed mod names
+    local installed = {}
+    if type(g_modManager.mods) == "table" then
+        for _, m in ipairs(g_modManager.mods) do
+            if type(m) == "table" and m.modName ~= nil then installed[_normMod(m.modName)] = true end
+        end
+    end
+    -- enumerate modSettings/ (getFiles is synchronous; fills _orphanCollector.entries)
+    _orphanCollector.entries = {}
+    pcall(function() getFiles(getUserProfileAppPath() .. "modSettings/", "onEntry", _orphanCollector) end)
+    for _, entry in ipairs(_orphanCollector.entries) do
+        -- only clearly mod-named entries (FS25_/FS22_/LS25_ prefix) to avoid false positives
+        -- on generic/feature-named files. Skip our own settings explicitly.
+        if (entry:match("^FS%d%d_") or entry:match("^LS%d%d_")) then
+            local norm = _normMod(entry)
+            if norm ~= "modmixer" and not installed[norm] then
+                result[#result + 1] = entry
+            end
+        end
+    end
+    return result
+end
+
 function SB.buildReviewItems()
     local items = {}
     -- 1) Redundancy candidates (offline detector: name/hook signals + modDesc descriptions)
@@ -1118,6 +1166,14 @@ function SB.buildReviewItems()
                 }
             end
         end
+    end
+    -- 4) Orphaned settings: modSettings/ left behind by uninstalled mods (runtime scan).
+    for _, entry in ipairs(SB.scanOrphanedSettings()) do
+        local key = "orphan|" .. entry
+        items[#items + 1] = {
+            rkind = "orphan", key = key, dismissed = SB.reviewDismissed[key] == true,
+            entry = entry,
+        }
     end
     return items
 end

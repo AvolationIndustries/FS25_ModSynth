@@ -92,7 +92,26 @@ def moddesc_text(mod):
     return re.sub(r"\s+", " ", t).strip()
 
 DESC_STOP = set("""the a an and or of to in for with on is are be this that mod script game your
-you it as at by from will can also new more when if then so do does each any all not but""".split())
+you it as at by from will can also new more when if then so do does each any all not but
+have has had they them then there here what which who how why into out over also other
+than only just may might should would could into your our their its his her
+""".split() + """
+prohibited uploading upload reupload sites site permission permitted redistribute
+redistribution modhub original credit credits author authors license licence copyright
+rights reserved allowed forbidden distribute distributing sharing share modpage
+linked link links download downloads below above discord youtube channel patreon coffee
+donate donation donations follow following page website web server feedback report bug
+bugs contact support paypal subscribe like comment video tutorial
+aswell nice please enjoy enjoyed thanks thank thankyou hope feel free using used
+version versions changelog change changes changed update updated updates fix fixes fixed
+feature features add added adds adding make makes made work works working installed install
+installation want wants needs need note information info details description give gives
+illegal linking substitute substituting modifying modify modified therefore part parts
+written consent prior manner form sole intended purpose purposes content contents material
+materials party parties terms agreement agree condition conditions herein whatsoever obtain
+obtained explicit express expressly without within upon under regarding regards consider
+running currently about play show via due owner owners user users people anyone everyone
+""".split())
 def desc_tokens(text):
     return {w for w in re.sub(r"[^A-Za-z]+", " ", text.lower()).split()
             if len(w) >= 4 and w not in DESC_STOP}
@@ -179,12 +198,45 @@ for i in range(len(name_mods)):
         rec["name_tokens"] = sorted(shared_t)
         cand[key] = rec
 
+# ── signal 3: DESCRIPTION similarity — catches same-PURPOSE mods that share neither a
+#    distinctive NAME token nor distinctive HOOKS (the MR<->REAplus gap). Weighted by word
+#    rarity (idf) so generic blurb ("makes the game more realistic", "adds a mod") can't
+#    match; requires >=3 DISTINCTIVE shared description words. HONEST LIMIT: a mod with a
+#    near-empty description (MoreRealistic's one-liner) still can't be matched this way —
+#    descriptions only help where authors actually described the purpose.
+_desc = {m: moddesc_text(m) for m in name_mods}
+_dtok = {m: desc_tokens(_desc[m]) for m in name_mods}
+_ddf = defaultdict(int)
+for _m, _t in _dtok.items():
+    for _w in _t: _ddf[_w] += 1
+def _didf(w): return math.log((len(name_mods) + 1) / (_ddf[w] + 1)) + 1.0
+DESC_DISTINCTIVE_DF = 8
+for i in range(len(name_mods)):
+    ta = _dtok[name_mods[i]]
+    if len(ta) < 5: continue                              # too thin to judge purpose
+    for j in range(i + 1, len(name_mods)):
+        a, b = name_mods[i], name_mods[j]
+        key = (a, b)
+        if key in cand: continue                          # already flagged by name/hook
+        if base_name(a) == base_name(b): continue
+        tb = _dtok[b]
+        if len(tb) < 5: continue
+        shared = ta & tb
+        distinctive = [w for w in shared if _ddf[w] <= DESC_DISTINCTIVE_DF]
+        if len(distinctive) < 3: continue
+        score = sum(_didf(w) for w in distinctive)
+        coeff = len(shared) / max(1, min(len(ta), len(tb)))
+        if score >= 16.0 and coeff >= 0.35:
+            cand[key] = {"hook_score": 0.0, "coeff": 0.0, "shared": [], "name_tokens": [],
+                         "desc_match": sorted(distinctive, key=lambda w: -_didf(w))[:6]}
+
 # ── enrich with modDesc descriptions: the purpose text that lets a HUMAN judge. We do
 #    NOT auto-suppress on it (an algorithm guessing purpose is what produced the false
 #    positives) — we attach it for the view to show, and use description overlap only to
 #    RANK likely-same-purpose pairs above likely-different ones.
 desc_cache = {}
 def get_desc(mod):
+    if mod in _desc: return _desc[mod]                    # reuse signal-3 extraction
     if mod not in desc_cache: desc_cache[mod] = moddesc_text(mod)
     return desc_cache[mod]
 for (a, b), rec in cand.items():
@@ -196,8 +248,9 @@ for (a, b), rec in cand.items():
 # rank: BOTH-signal first; then name pairs whose DESCRIPTIONS also overlap (likely truly
 # the same job) above name pairs whose descriptions diverge (likely a false positive).
 def confidence(rec):
-    both = rec["hook_score"] > 0 and rec["name_tokens"]
-    return (2 if both else 1 if rec["name_tokens"] else 0, rec.get("desc_overlap", 0.0), rec["hook_score"])
+    both   = rec["hook_score"] > 0 and rec["name_tokens"]
+    strong = rec["name_tokens"] or rec.get("desc_match")   # name OR purpose match = real signal
+    return (2 if both else 1 if strong else 0, rec.get("desc_overlap", 0.0), rec["hook_score"])
 ranked = sorted(cand.items(), key=lambda kv: confidence(kv[1]), reverse=True)
 
 # ── console report ───────────────────────────────────────────────────────────
@@ -209,11 +262,14 @@ def tag(rec):
     # conflict ModMixer already manages — flagged for review, not asserted as duplicate.
     if rec["hook_score"] > 0 and rec["name_tokens"]: return "DUPE? "
     if rec["name_tokens"]: return "NAME  "
+    if rec.get("desc_match"): return "DESC  "
     return "SYSTEM"
 for (a, b), rec in ranked[:60]:
     print(f"[{tag(rec)}] {a}  <>  {b}")
     if rec["name_tokens"]:
         print(f"          name: {', '.join(rec['name_tokens'])}   desc-overlap {rec.get('desc_overlap', 0)}")
+    if rec.get("desc_match"):
+        print(f"          purpose words: {', '.join(rec['desc_match'])}")
     if rec["hook_score"] > 0:
         print(f"          hooks(x{len(rec['shared'])}, score {rec['hook_score']}, overlap {rec['coeff']}): {', '.join(rec['shared'][:6])}")
     if rec.get("desc_a"): print(f"          A: {rec['desc_a'][:88]}")
@@ -227,7 +283,7 @@ L = ["-- mm_redundancy_generated.lua  (auto-generated by tools/gen_redundancy.py
      "ModMixerRedundancy = {"]
 for (a, b), rec in ranked:
     both = rec["hook_score"] > 0 and bool(rec["name_tokens"])
-    conf = "high" if both else ("med" if rec["name_tokens"] else "low")
+    conf = "high" if both else ("med" if (rec["name_tokens"] or rec.get("desc_match")) else "low")
     shared = "{ " + ", ".join(luaq(f) for f in rec["shared"]) + " }"
     toks   = "{ " + ", ".join(luaq(t) for t in rec["name_tokens"]) + " }"
     L.append("    { a = %s, b = %s, confidence = %s, hookScore = %s, descOverlap = %s, "
