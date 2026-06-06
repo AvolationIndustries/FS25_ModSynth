@@ -27,15 +27,15 @@
         <Text profile="ModMixer_helpBox" id="featureHelp" text=""
               position="580px -56px" size="920px 88px"/>
 
-        <Text profile="ModMixer_colHeader" text="MOD"     position="20px -150px"  size="300px 24px"/>
-        <Text profile="ModMixer_colHeader" text="FEATURE" position="340px -150px" size="500px 24px"/>
+        <Text profile="ModMixer_colHeader" text="MOD"     position="20px -150px"  size="500px 24px"/>
+        <Text profile="ModMixer_colHeader" text="FEATURE" position="530px -150px" size="320px 24px"/>
         <Text profile="ModMixer_colHeader" text="STATE"   position="860px -150px" size="300px 24px"/>
         <ThreePartBitmap profile="fs25_lineSeparatorTopHighlighted" position="0px -178px"/>
 
         <SmoothList id="featureList" profile="ModMixer_table" position="20px -186px" size="1480px 540px">
             <ListItem profile="ModMixer_listItem">
-                <Text profile="ModMixer_cellLeft"  position="20px 0px"  size="300px 40px" name="mod"/>
-                <Text profile="ModMixer_cellLeft"  position="340px 0px" size="500px 40px" name="feature"/>
+                <Text profile="ModMixer_cellLeft"  position="20px 0px"  size="500px 40px" name="mod"/>
+                <Text profile="ModMixer_cellLeft"  position="530px 0px" size="320px 40px" name="feature"/>
                 <!-- State text: toggle / hook rows -->
                 <Text profile="ModMixer_cellState" position="860px 0px" size="560px 40px" name="state"/>
                 <!-- Value rows: smooth green fill bar (stock contracts progress-bar

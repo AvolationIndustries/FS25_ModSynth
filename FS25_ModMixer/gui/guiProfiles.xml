@@ -41,9 +41,9 @@
     <!-- Feature help box (top-right): plain-English explanation of the selected row.
          Multi-line, top-aligned, a touch brighter than the bottom legend. -->
     <Profile name="ModMixer_helpBox" extends="fs25_statisticsHeaderText" with="anchorTopLeft">
-        <textMaxNumLines value="4"/>
+        <textMaxNumLines value="5"/>
         <textVerticalAlignment value="top"/>
-        <textSize value="15px"/>
+        <textSize value="13px"/>
         <textColor value="$preset_fs25_colorMainLight"/>
     </Profile>
 
