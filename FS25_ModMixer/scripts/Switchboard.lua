@@ -447,6 +447,12 @@ SB.vetoes = {}
 -- the contesting mods' hooks and replays them onto the base in this order.
 SB.reorders = {}
 
+-- Hibernate (live mod parking): a set of modNames the user has PARKED — their per-frame
+-- update/draw/input is gated so they cost ~zero CPU. UNLIKE vetoes this is LIVE (a
+-- boolean flip, no restart) and reversible. Mirrored into Utils.__ms_hibernate (the gate
+-- table ModMixerHooks reads each frame). Persisted so a park survives restarts.
+SB.hibernated = SB.hibernated or {}
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- TIERED RESOLUTION (Seating / Category / Advanced) — friendly layers over the veto
 -- path. NONE of these is a new enforcement mechanism: they all DRIVE setHookWinner in
@@ -606,11 +612,21 @@ local function doLoad()
         dj = dj + 1
     end
 
+    local loadedHibernated = {}
+    local hj = 0
+    while true do
+        local hm = getXMLString(xml, string.format("switchboard.hibernated.mod(%d)#name", hj))
+        if hm == nil then break end
+        loadedHibernated[hm] = true
+        hj = hj + 1
+    end
+
     delete(xml)
     SB.overrides = loaded
     SB.vetoes = loadedVetoes
     SB.reorders = loadedReorders
     SB.reviewDismissed = loadedDismissed
+    SB.hibernated = loadedHibernated
     -- migrate the older two-mode value ("basic" → "seating")
     if loadedMode == "basic" then loadedMode = "seating" end
     if loadedMode == "seating" or loadedMode == "category" or loadedMode == "advanced"
@@ -716,6 +732,14 @@ local function doSave()
         if on then
             setXMLString(xml, string.format("switchboard.reviewDismissed.item(%d)#key", di), key)
             di = di + 1
+        end
+    end
+
+    local hi = 0
+    for modName, on in pairs(SB.hibernated or {}) do
+        if on then
+            setXMLString(xml, string.format("switchboard.hibernated.mod(%d)#name", hi), modName)
+            hi = hi + 1
         end
     end
 
@@ -905,6 +929,310 @@ function SB.clearHookOrder(target)
     SB.save()
 end
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- HIBERNATE API (live mod parking). A "park" gates a mod's per-frame update/draw/
+-- input via the wrappers ModMixerHooks installed at load, by flipping one boolean
+-- (Utils.__ms_hibernate[mod]). LIVE (no restart) and reversible. Persisted, then
+-- re-applied to the live table after load via SB.applyHibernate. Only mods that
+-- registered a modEventListener are parkable (Utils.__ms_modListeners), which the
+-- interceptor populated at load — broad coverage (Courseplay/AutoDrive/Terrafarm
+-- and most script mods all register that way).
+-- ─────────────────────────────────────────────────────────────────────────────
+function SB.isHibernatable(modName)
+    return type(Utils) == "table" and type(Utils.__ms_modListeners) == "table"
+        and Utils.__ms_modListeners[modName] ~= nil
+end
+
+function SB.listHibernatable()
+    local out = {}
+    if type(Utils) == "table" and type(Utils.__ms_hibernatable) == "table" then
+        for _, m in ipairs(Utils.__ms_hibernatable) do out[#out + 1] = m end
+    end
+    table.sort(out)
+    return out
+end
+
+function SB.isHibernated(modName) return SB.hibernated[modName] == true end
+
+function SB.setHibernate(modName, on)
+    if on then SB.hibernated[modName] = true else SB.hibernated[modName] = nil end
+    if type(Utils) == "table" then
+        Utils.__ms_hibernate = Utils.__ms_hibernate or {}
+        Utils.__ms_hibernate[modName] = on and true or nil   -- LIVE flip; gate reads it next frame
+        -- Snapshot the cost we're about to save (parked mods stop accruing) so the readout
+        -- can show "saving ~X ms/f"; clear it on wake so live timing takes over again.
+        if type(Utils.__ms_cost) == "table" then
+            local c = Utils.__ms_cost[modName]
+            if c ~= nil then
+                if on and (c.frames or 0) > 0 then
+                    c.savedMs = (c.upd + c.drw) / c.frames * 1000
+                elseif not on then
+                    c.savedMs = nil
+                end
+            end
+        end
+    end
+    SB.save()
+    gamelog(string.format("%s %s (live).", modName, on and "PARKED" or "woken"))
+end
+
+function SB.toggleHibernate(modName)
+    SB.setHibernate(modName, not SB.isHibernated(modName))
+    return SB.isHibernated(modName)
+end
+
+-- Push persisted parks into the live gate table (call after SB.load, once the mods
+-- are fully initialised). We never park DURING load — mods init normally first, then
+-- get parked here, so a saved park can't half-initialise anything.
+function SB.applyHibernate()
+    if type(Utils) ~= "table" then return end
+    Utils.__ms_hibernate = Utils.__ms_hibernate or {}
+    local n = 0
+    for modName, on in pairs(SB.hibernated) do
+        Utils.__ms_hibernate[modName] = on and true or nil
+        if on then n = n + 1 end
+    end
+    if n > 0 then gamelog(string.format("re-applied %d hibernated mod(s) from saved config.", n)) end
+end
+
+-- Console surface (like msVetoClear/msReorderClear). Partial, case-insensitive name
+-- match for convenience so you can type 'autodrive' not the full FS25_ prefix.
+function SB.consoleHibernateList(_)
+    local list = SB.listHibernatable()
+    if #list == 0 then
+        return "ModMixer: no parkable mods detected. Check the log for 'HIBERNATE: gated N listener(s)'."
+    end
+    local parts = {}
+    for _, m in ipairs(list) do
+        parts[#parts + 1] = "  " .. m .. (SB.isHibernated(m) and "   [PARKED]" or "")
+    end
+    return string.format("ModMixer parkable mods (%d):\n%s", #list, table.concat(parts, "\n"))
+end
+
+function SB.consoleHibernate(_, modName)
+    if modName == nil or modName == "" then
+        return "Usage: mmHibernate <ModName>   (run mmHibernateList for names)"
+    end
+    if not SB.isHibernatable(modName) then
+        local needle, match = modName:lower(), nil
+        for _, m in ipairs(SB.listHibernatable()) do
+            if m:lower():find(needle, 1, true) then match = m; break end
+        end
+        if match == nil then
+            return string.format("ModMixer: '%s' has no gated listener (run mmHibernateList).", modName)
+        end
+        modName = match
+    end
+    local now = SB.toggleHibernate(modName)
+    return string.format("ModMixer: %s is now %s.", modName,
+        now and "PARKED (update/draw/input gated — CPU freed)" or "AWAKE")
+end
+
+-- Per-mod main-loop cost readout (ms/frame). Workflow: mmCostReset → play ~30s with
+-- everything awake → mmCost to see each mod's cost, sorted heaviest-first, plus the total
+-- you could reclaim by parking. Parked mods show the cost they're saving (snapshot at park
+-- time, since a parked mod stops accruing). "Main-loop" = the listener update/draw we gate;
+-- it excludes per-vehicle spec code + engine-side asset/physics cost (honest scope).
+function SB.consoleCost(_)
+    if type(Utils) ~= "table" or type(Utils.__ms_cost) ~= "table" then
+        return "ModMixer: cost data unavailable (timer missing?). Check log 'timer probe'."
+    end
+    -- Frame-time header: dt-based ms/frame + fps (the "cycle time" readout). Shown even
+    -- when there are no per-mod samples yet.
+    local fhdr = ""
+    if type(Utils.__ms_frame) == "table" and (Utils.__ms_frame.n or 0) > 0 then
+        local fr = Utils.__ms_frame
+        local avg = fr.acc / fr.n
+        fhdr = string.format("frame: %.2f ms/f avg, %.1f ms peak  (~%.0f fps, %d frames)\n",
+            avg, fr.maxMs or 0, (avg > 0 and 1000 / avg or 0), fr.n)
+    end
+    local rows = {}
+    for modName, c in pairs(Utils.__ms_cost) do
+        local parked = SB.isHibernated(modName)
+        local frames = c.frames or 0
+        local ms
+        if parked then ms = c.savedMs or 0
+        elseif frames > 0 then ms = (c.upd + c.drw) / frames * 1000
+        else ms = 0 end
+        if ms > 0.0005 then rows[#rows + 1] = { mod = modName, ms = ms, parked = parked } end
+    end
+    if #rows == 0 then
+        return fhdr .. "ModMixer: no per-mod cost samples yet. Run mmCostReset, play ~30s, then mmCost."
+    end
+    table.sort(rows, function(a, b) return a.ms > b.ms end)
+    local parts, reclaimable, saved, shown = {}, 0, 0, 0
+    for _, r in ipairs(rows) do
+        if r.parked then saved = saved + r.ms else reclaimable = reclaimable + r.ms end
+        if shown < 30 then
+            shown = shown + 1
+            parts[#parts + 1] = string.format("  %7.3f ms/f  %s%s", r.ms, r.mod,
+                r.parked and "   [PARKED — saving]" or "")
+        end
+    end
+    if #rows > shown then parts[#parts + 1] = string.format("  ... and %d more", #rows - shown) end
+    return fhdr .. string.format(
+        "ModMixer main-loop cost (ms/frame), heaviest first:\n%s\n  ---\n"
+        .. "  awake total (reclaimable by parking): %.3f ms/f\n"
+        .. "  already parked (being saved):         %.3f ms/f",
+        table.concat(parts, "\n"), reclaimable, saved)
+end
+
+function SB.consoleCostReset(_)
+    if type(Utils) == "table" and type(Utils.__ms_cost) == "table" then
+        for _, c in pairs(Utils.__ms_cost) do
+            c.upd = 0; c.drw = 0; c.frames = 0; c.maxMs = 0; c.spikes = 0
+        end
+    end
+    if type(Utils) == "table" and type(Utils.__ms_frame) == "table" then
+        Utils.__ms_frame.acc = 0; Utils.__ms_frame.n = 0; Utils.__ms_frame.maxMs = 0
+    end
+    if type(Utils) == "table" and type(Utils.__ms_hookCost) == "table" then
+        for _, c in pairs(Utils.__ms_hookCost) do c.t = 0; c.n = 0; c.maxMs = 0; c.spikes = 0; c.frameT = 0 end
+    end
+    return "ModMixer: all cost/frame/hook/spec accumulators reset. Play ~30s, then mmLoad / mmCost / mmPeaks."
+end
+
+-- mmLoad: "the number that matters." Total per-frame mod SCRIPT cost vs the 60fps budget, so
+-- you can see how close the stack is to the CPU limit and which mods are eating it. Sums every
+-- measured mod's AVG ms/frame (listener + hook + spec) over the sample window. The mod COUNT
+-- isn't the limit — the mod COST is (one heavy mod can outweigh 100 light ones). Hook/spec are
+-- only counted while the probe is armed; listener cost is always on.
+function SB.consoleLoad(_)
+    if type(Utils) ~= "table" or type(Utils.__ms_frame) ~= "table" then
+        return "ModMixer: load data unavailable."
+    end
+    local fr = Utils.__ms_frame
+    local frames = fr.n or 0
+    if frames < 30 then
+        return string.format("ModMixer: only %d frames sampled. Run mmCostReset, play ~30s, then mmLoad.", frames)
+    end
+    local frameAvg = (fr.acc or 0) / frames * 1000
+    local perMod, listenerMs, hookMs = {}, 0, 0
+    if type(Utils.__ms_cost) == "table" then
+        for mod, c in pairs(Utils.__ms_cost) do
+            local ms = ((c.upd or 0) + (c.drw or 0)) / frames * 1000
+            if ms > 0.001 then listenerMs = listenerMs + ms; perMod[mod] = (perMod[mod] or 0) + ms end
+        end
+    end
+    if type(Utils.__ms_hookCost) == "table" then
+        for _, c in pairs(Utils.__ms_hookCost) do
+            local ms = (c.t or 0) / frames * 1000
+            if ms > 0.001 then hookMs = hookMs + ms; perMod[c.mod] = (perMod[c.mod] or 0) + ms end
+        end
+    end
+    local total = listenerMs + hookMs
+    local rows = {}
+    for mod, ms in pairs(perMod) do rows[#rows + 1] = { mod = mod, ms = ms } end
+    table.sort(rows, function(a, b) return a.ms > b.ms end)
+    local parts = {}
+    for i = 1, math.min(10, #rows) do
+        parts[#parts + 1] = string.format("  %6.2f ms/f  %s", rows[i].ms, rows[i].mod)
+    end
+    local budget = 1000 / 60
+    return string.format(
+        "ModMixer LOAD  (avg over %d frames)\n"
+        .. "  actual frame:   %.2f ms/f  (~%.0f fps)\n"
+        .. "  measured mods:  %.2f ms/f   (listener %.2f + hook/spec %.2f)\n"
+        .. "  60fps budget:   %.2f ms/f   -> measured mods = %.0f%% of it\n"
+        .. "  (hook/spec only while the probe is armed; %d mods contributing)\n"
+        .. "  heaviest:\n%s",
+        frames, frameAvg, (frameAvg > 0 and 1000 / frameAvg or 0),
+        total, listenerMs, hookMs, budget, (total / budget * 100), #rows,
+        table.concat(parts, "\n"))
+end
+
+-- Worst single-frame SPIKES per mod (sorted by peak ms) — purpose-built for hunting a
+-- periodic tick, which an average hides. Listener update/draw only; a tick from a
+-- vehicle-physics HOOK/spec won't appear here (that's itself a useful signal → hook probe).
+function SB.consolePeaks(_)
+    if type(Utils) ~= "table" or type(Utils.__ms_cost) ~= "table" then
+        return "ModMixer: cost data unavailable."
+    end
+    local rows = {}
+    for modName, c in pairs(Utils.__ms_cost) do
+        local peak = c.maxMs or 0
+        if peak > 0.5 then
+            rows[#rows + 1] = { mod = modName, peak = peak, spikes = c.spikes or 0,
+                                parked = SB.isHibernated(modName) }
+        end
+    end
+    local fpeak = (type(Utils.__ms_frame) == "table") and (Utils.__ms_frame.maxMs or 0) or 0
+    if #rows == 0 then
+        return string.format("ModMixer: no listener spikes recorded (worst frame %.1f ms). If you "
+            .. "felt a tick, it's a vehicle-physics HOOK/spec or engine — not a listener. "
+            .. "Say so and I'll add the hook-cost probe.", fpeak)
+    end
+    table.sort(rows, function(a, b) return a.peak > b.peak end)
+    local parts, shown = {}, 0
+    for _, r in ipairs(rows) do
+        if shown < 25 then
+            shown = shown + 1
+            parts[#parts + 1] = string.format("  peak %7.1f ms  %4d spike(s)  %s%s",
+                r.peak, r.spikes, r.mod, r.parked and "  [PARKED]" or "")
+        end
+    end
+    return string.format("ModMixer worst single-frame spikes (listener update/draw), worst first:\n%s\n  ---\n"
+        .. "  worst frame overall: %.1f ms\n"
+        .. "  (a tick from a vehicle-physics HOOK/spec is NOT timed here — if nothing above\n"
+        .. "   lines up with your tick, it's hook/spec/engine and we add the hook probe.)",
+        table.concat(parts, "\n"), fpeak)
+end
+
+-- ── HOOK-COST PROBE readout (opt-in; armed via modSettings/FS25_ModMixer/MODMIXER_HOOKPROBE.txt
+-- + restart). Times per-mod cost INSIDE the named hook chains — the per-frame physics/update
+-- functions the listener timer can't see. Sorted by worst per-frame peak (the tick).
+function SB.consoleHookCost(_)
+    if type(Utils) ~= "table" or type(Utils.__ms_hookProbe) ~= "table" then
+        return "ModMixer: hook probe NOT armed. Create an empty file "
+            .. "modSettings/FS25_ModMixer/MODMIXER_HOOKPROBE.txt and restart, then mmHookCost."
+    end
+    local on = Utils.__ms_hookProbe.on
+    local rows = {}
+    if type(Utils.__ms_hookCost) == "table" then
+        for _, c in pairs(Utils.__ms_hookCost) do
+            if (c.maxMs or 0) > 0.05 or (c.t or 0) > 0 then
+                rows[#rows + 1] = { mod = c.mod, target = c.target, peak = c.maxMs or 0,
+                    spikes = c.spikes or 0 }
+            end
+        end
+    end
+    if #rows == 0 then
+        return string.format("ModMixer hook probe armed (timing %s) but no samples yet. "
+            .. "Ensure 'mmHookProbe on', play through the tick, then mmHookCost.", on and "ON" or "OFF")
+    end
+    table.sort(rows, function(a, b) return a.peak > b.peak end)
+    local parts, shown = {}, 0
+    for _, r in ipairs(rows) do
+        if shown < 25 then
+            shown = shown + 1
+            parts[#parts + 1] = string.format("  peak %7.1f ms  %4d spike(s)  %s -> %s",
+                r.peak, r.spikes, r.mod, r.target)
+        end
+    end
+    return string.format("ModMixer HOOK cost per-frame (mod -> function), worst peak first  [timing %s]:\n%s\n  ---\n"
+        .. "  (overwrite times include the inner chain; appends are clean. The worst peak = your tick.)",
+        on and "ON" or "OFF", table.concat(parts, "\n"))
+end
+
+function SB.consoleHookProbe(_, arg)
+    if type(Utils) ~= "table" or type(Utils.__ms_hookProbe) ~= "table" then
+        return "ModMixer: hook probe NOT armed. Create modSettings/FS25_ModMixer/MODMIXER_HOOKPROBE.txt and restart."
+    end
+    if arg == "off" then Utils.__ms_hookProbe.on = false; return "ModMixer: hook-probe timing OFF."
+    elseif arg == "on" then Utils.__ms_hookProbe.on = true; return "ModMixer: hook-probe timing ON."
+    else return "Usage: mmHookProbe on | off   (currently "
+        .. (Utils.__ms_hookProbe.on and "ON" or "OFF") .. ")" end
+end
+
+function SB.consoleHookProbeReset(_)
+    if type(Utils) == "table" and type(Utils.__ms_hookCost) == "table" then
+        for _, c in pairs(Utils.__ms_hookCost) do
+            c.t = 0; c.n = 0; c.maxMs = 0; c.spikes = 0; c.frameT = 0
+        end
+    end
+    return "ModMixer: hook-cost accumulators reset. Play through the tick, then mmHookCost."
+end
+
 -- Console recovery: `msVetoClear` wipes all hook vetoes (restart to apply). Use
 -- this if a veto causes trouble and the game still loads enough to reach the
 -- console (~). For a total load brick, delete switchboard.xml or drop a
@@ -935,6 +1263,11 @@ function SB.resetAll()
     SB.vetoes     = {}
     SB.reorders   = {}
     SB.originalValues = {}   -- discard any captured pre-override values too
+    -- wake any parked mods live (clear both the live gate table and persisted set)
+    if type(Utils) == "table" and type(Utils.__ms_hibernate) == "table" then
+        for m in pairs(SB.hibernated) do Utils.__ms_hibernate[m] = nil end
+    end
+    SB.hibernated = {}
     SB.save()
     SB.applyAll()   -- re-apply with empty overrides = let every mod drive itself
 end
@@ -945,6 +1278,24 @@ if addConsoleCommand ~= nil and not SB._consoleRegistered then
         "consoleClearVetoes", SB)
     addConsoleCommand("msReorderClear", "Clear all ModMixer chain reorders (restart to apply)",
         "consoleClearReorders", SB)
+    addConsoleCommand("mmHibernate", "Park/wake a mod LIVE to free CPU. Usage: mmHibernate <ModName>",
+        "consoleHibernate", SB)
+    addConsoleCommand("mmHibernateList", "List mods that can be hibernated (parked) live",
+        "consoleHibernateList", SB)
+    addConsoleCommand("mmCost", "Show per-mod main-loop CPU cost (ms/frame), heaviest first",
+        "consoleCost", SB)
+    addConsoleCommand("mmCostReset", "Zero the per-mod cost accumulators for a fresh measurement",
+        "consoleCostReset", SB)
+    addConsoleCommand("mmPeaks", "Show worst single-frame spikes per mod (hunt periodic ticks)",
+        "consolePeaks", SB)
+    addConsoleCommand("mmHookCost", "Per-mod cost INSIDE hook chains (arm via MODMIXER_HOOKPROBE.txt)",
+        "consoleHookCost", SB)
+    addConsoleCommand("mmHookProbe", "Toggle hook-probe timing live. Usage: mmHookProbe on|off",
+        "consoleHookProbe", SB)
+    addConsoleCommand("mmHookProbeReset", "Zero the hook-probe accumulators",
+        "consoleHookProbeReset", SB)
+    addConsoleCommand("mmLoad", "Total per-frame mod script cost vs the 60fps budget (the number that matters)",
+        "consoleLoad", SB)
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -1336,6 +1687,7 @@ if Mission00 ~= nil and type(Mission00.loadMission00Finished) == "function"
         function()
             SB.load()
             SB.applyAll()
+            SB.applyHibernate()   -- re-park any mods saved as hibernated (LIVE, after init)
         end)
     gamelog("armed — config loads + overrides apply at map load")
 else

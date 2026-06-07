@@ -68,6 +68,320 @@ Utils.__ms_reorderBuf   = {}   -- [target] = { base=fn, hooks={ {mod,impl,kind},
 Utils.__ms_reorderBuilt = {}   -- [target] = built chain wrapper (lazy, built on first call)
 Utils.__ms_trampTargets = {}   -- [trampolineFn] = target  (so a re-hook of a reordered slot resolves)
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- HIBERNATE (live mod parking) — gate a mod's per-frame entry points so its CPU
+-- cost drops to ~zero, REVERSIBLY and WITHOUT a restart. We load first, before any
+-- mod registers, so we wrap addModEventListener: each registered listener is tagged
+-- with the mod that registered it (g_currentModName) and its update/draw/mouseEvent/
+-- keyEvent are wrapped with a one-line gate that early-returns while the mod is parked.
+-- loadMap/loadMapFinished/deleteMap are NEVER gated (load/save lifecycle — same
+-- principle as isLoadCritical for vetoes). Toggling = a single boolean flip
+-- (Utils.__ms_hibernate[mod]); the Switchboard drives it live and persists it. The
+-- wrappers install ONCE at registration; only a boolean changes at runtime, so there
+-- is no mid-game re-wrapping and no load-brick risk (the Farm.new lesson). The mod
+-- loads + inits fully first; parking only skips its subsequent per-frame work.
+-- ─────────────────────────────────────────────────────────────────────────────
+Utils.__ms_hibernate    = Utils.__ms_hibernate    or {}   -- [modName]=true → parked (read every frame)
+Utils.__ms_modListeners = Utils.__ms_modListeners or {}   -- [modName] = { listener, ... }
+Utils.__ms_hibernatable = Utils.__ms_hibernatable or {}   -- ordered modName list (UI / console)
+local _hibTable       = Utils.__ms_hibernate
+local _gatedListeners = {}                                 -- [listener]=true (dedupe re-adds)
+
+-- Per-mod main-loop COST (ms/frame). We already wrap every listener's update/draw, so
+-- timing the inner call is almost free AND measures exactly what parking reclaims. The
+-- in-game readout (mmCost) means no external overlay is needed — and overlays can't
+-- attribute cost per-mod anyway. Stored as running totals; mmCost divides by frames,
+-- mmCostReset zeroes them for a clean activity measurement.
+Utils.__ms_cost = Utils.__ms_cost or {}                   -- [modName] = { upd, drw, frames, savedMs }
+local _cost = Utils.__ms_cost
+Utils.__ms_frame = Utils.__ms_frame or { acc = 0, n = 0 } -- wall-clock frame-time accumulator (dt → ms/frame + fps)
+local _now  = (type(getTimeSec) == "function") and getTimeSec or nil
+
+-- Engine perf-API probe (one-shot): does FS25 expose a frame/CPU timing global we could
+-- ALSO surface (the engine's ".ms cycle time" split)? Log which candidates resolve so we
+-- can wire the real one next pass. The dt-based frame time below works regardless.
+do
+    local cands = { "getFrameTimerTime", "getFps", "getAverageFrameTime", "getFrameTime",
+                    "getProfilerTime", "getCpuLoad", "getMonotonicTime", "getPerformanceTime" }
+    local found = {}
+    for _, name in ipairs(cands) do
+        local ok, v = pcall(function() return _G[name] end)
+        if ok and v ~= nil then found[#found + 1] = name .. "(" .. type(v) .. ")" end
+    end
+    log("perf-api probe: " .. (#found > 0 and table.concat(found, ", ")
+        or "no candidate timing globals found — frame time from dt"))
+end
+
+-- Timer-resolution probe (one-shot, at load): is getTimeSec fine-grained enough to time a
+-- sub-ms mod update? Logs the smallest non-zero tick so we know if the numbers are solid.
+if _now ~= nil then
+    pcall(function()
+        local minD, last = nil, _now()
+        for _ = 1, 100000 do
+            local cur = _now()
+            local d = cur - last
+            if d > 0 then if minD == nil or d < minD then minD = d end; last = cur end
+        end
+        log(string.format("timer probe: getTimeSec min tick = %s s (%.5f ms) — %s",
+            tostring(minD), (minD or 0) * 1000,
+            (minD ~= nil and minD < 0.0005) and "sub-ms OK for per-mod cost"
+            or "COARSE: per-mod cost will be noisy"))
+    end)
+else
+    log("timer probe: getTimeSec unavailable — per-mod cost disabled.")
+end
+
+-- Never park ourselves: the watchdog / save-guard listener must keep ticking.
+local HIBERNATE_SKIP = { ["FS25_0_ModMixer"] = true, ["FS25_ModMixer"] = true }
+local GATED_METHODS  = { "update", "draw", "mouseEvent", "keyEvent" }
+
+-- Accrue elapsed time for a timed method. Multi-return-safe: orig's results pass through
+-- untouched, and an error inside orig propagates exactly as it would un-wrapped (we never
+-- pcall it — that would alter mod semantics + add overhead). Also tracks PEAK single-call
+-- time + spike count (a periodic tick is a SPIKE, not steady cost — averages hide it) and
+-- LIVE-LOGS any call over SPIKE_MS so a felt stutter can be matched to its mod by timestamp.
+local SPIKE_MS = 3       -- a single frame's listener/hook/spec cost over this = a stutter contributor
+local function _accrue(modName, slot, t0, ...)
+    local now = _now()
+    local el  = now - t0
+    local c = _cost[modName]
+    if c == nil then c = { upd = 0, drw = 0, frames = 0, maxMs = 0, spikes = 0, lastSpikeT = 0 }; _cost[modName] = c end
+    c[slot] = c[slot] + el
+    if slot == "upd" then c.frames = c.frames + 1 end
+    local elMs = el * 1000
+    if elMs > c.maxMs then c.maxMs = elMs end
+    if elMs > SPIKE_MS then
+        c.spikes = c.spikes + 1
+        if now - (c.lastSpikeT or 0) > 1.0 then           -- rate-limit: <=1 log/mod/sec
+            c.lastSpikeT = now
+            print(string.format("[ModMixer SPIKE] %s %s took %.1f ms this frame "
+                .. "(periodic tick suspect)", modName, slot, elMs))
+        end
+    end
+    return ...
+end
+
+local function _gateListenerMethod(listener, methodName, modName)
+    local orig = listener[methodName]
+    if type(orig) ~= "function" then return end          -- never ADD a method that wasn't there
+    if _now ~= nil and (methodName == "update" or methodName == "draw") then
+        local slot = (methodName == "update") and "upd" or "drw"
+        listener[methodName] = function(self, ...)
+            if _hibTable[modName] then return end        -- parked → skip + cost nothing
+            return _accrue(modName, slot, _now(), orig(self, ...))
+        end
+    else
+        listener[methodName] = function(self, ...)
+            if _hibTable[modName] then return end        -- parked → skip this mod's frame work
+            return orig(self, ...)
+        end
+    end
+end
+
+local function _registerHibernatable(modName, listener)
+    if modName == nil or listener == nil or HIBERNATE_SKIP[modName] then return end
+    if _gatedListeners[listener] then return end          -- already gated this object
+    _gatedListeners[listener] = true
+    local lst = Utils.__ms_modListeners[modName]
+    if lst == nil then
+        lst = {}
+        Utils.__ms_modListeners[modName] = lst
+        Utils.__ms_hibernatable[#Utils.__ms_hibernatable + 1] = modName
+    end
+    lst[#lst + 1] = listener
+    for _, m in ipairs(GATED_METHODS) do _gateListenerMethod(listener, m, modName) end
+end
+
+-- Registration interception. A bare-global override is env-LOCAL in FS25 (confirmed
+-- in-game 2026-06-07: our _G write did NOT reach other mods → gated 0, while our
+-- Utils.* override DOES reach them because Utils is a SHARED TABLE field). Engine
+-- globals resolve through each mod env's metatable __index → a shared base table, so
+-- to be seen by other mods the wrapper must be written THERE. We try every route and
+-- log which were writable; the loadMission00Finished fallback (enumerate
+-- g_modEventListeners) gates anything these miss.
+if type(addModEventListener) == "function" then
+    local _orig_addEvent = addModEventListener
+    local _wrappedAddEvent = function(listener)
+        local modName = (g_currentModName ~= nil and g_currentModName ~= "") and g_currentModName or nil
+        if modName ~= nil and type(listener) == "table" then
+            pcall(_registerHibernatable, modName, listener)
+        end
+        return _orig_addEvent(listener)
+    end
+    local routes = {}
+    addModEventListener = _wrappedAddEvent   -- our own env (covers our own later call)
+    pcall(function() _G.addModEventListener = _wrappedAddEvent; routes[#routes + 1] = "_G" end)
+    pcall(function()
+        local mt = getmetatable(_G)
+        log("env probe: getmetatable(_G)=" .. type(mt)
+            .. (type(mt) == "table" and (" __index=" .. type(mt.__index)) or ""))
+        if type(mt) == "table" and type(mt.__index) == "table" then
+            mt.__index.addModEventListener = _wrappedAddEvent
+            routes[#routes + 1] = "mt.__index"
+        end
+    end)
+    log("addModEventListener override routes written: "
+        .. (#routes > 0 and table.concat(routes, ", ") or "NONE"))
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- HOOK-COST PROBE (opt-in, file-armed) — times per-mod cost INSIDE the hook chains
+-- (the per-frame physics/update functions mods overwrite), which the listener cost
+-- timer can't see. Default OFF with ZERO overhead: the timing wrapper is only installed
+-- when modSettings/FS25_ModMixer/MODMIXER_HOOKPROBE.txt exists at load. Once armed, the
+-- wrapper is boolean-gated (mmHookProbe on/off) so you can isolate live. A per-frame
+-- rollup (folded into MMSaveGuard:update) catches a periodic tick whether it's one fat
+-- call or spread across many vehicles in a frame. Caveat: an OVERWRITE's measured time
+-- includes the inner chain it calls (superFunc); APPENDS time cleanly. Enough to name it.
+-- ─────────────────────────────────────────────────────────────────────────────
+local _hookProbeArmed = false
+if _now ~= nil and type(getUserProfileAppPath) == "function" and type(fileExists) == "function" then
+    local dir = getUserProfileAppPath() .. "modSettings/FS25_ModMixer/"
+    _hookProbeArmed = fileExists(dir .. "MODMIXER_HOOKPROBE.txt")
+end
+Utils.__ms_hookProbe = Utils.__ms_hookProbe or { on = _hookProbeArmed }
+Utils.__ms_hookCost  = Utils.__ms_hookCost  or {}
+local _hp       = Utils.__ms_hookProbe
+local _hookCost = Utils.__ms_hookCost
+if _hookProbeArmed then
+    log("HOOK PROBE ARMED (MODMIXER_HOOKPROBE.txt present) — timing named hook chains. "
+        .. "mmHookCost to read, mmHookProbe on/off to toggle, mmHookProbeReset to zero. "
+        .. "Delete the file + restart to disarm.")
+end
+
+-- Accrue a hooked call's time into a per-(mod,target) entry's running + per-frame totals
+-- (per-frame field rolled up by MMSaveGuard:update). Multi-return-safe; never pcalls fn.
+local function _accrueHook(c, t0, ...)
+    local el = _now() - t0
+    c.t = c.t + el; c.n = c.n + 1; c.frameT = c.frameT + el
+    return ...
+end
+
+-- One cost entry per mod+target so the readout/spike log names the exact function. The
+-- entry is captured in the closure (no per-call lookup). target nil = a hook outside the
+-- named set (shown as "(untracked)") — still attributed to the mod that installed it.
+local function _wrapHookTiming(mod, target, fn)
+    local key = mod .. "|" .. (target or "(untracked)")
+    local c = _hookCost[key]
+    if c == nil then
+        c = { mod = mod, target = target or "(untracked)", t = 0, n = 0, maxMs = 0,
+              spikes = 0, lastSpikeT = 0, frameT = 0 }
+        _hookCost[key] = c
+    end
+    return function(...)
+        if not _hp.on then return fn(...) end
+        return _accrueHook(c, _now(), fn(...))
+    end
+end
+
+-- SPEC-UPDATE PROBE (same file-arm as the hook probe). Vehicle/implement specializations
+-- register their per-frame work via SpecializationUtil.registerEventListener(type, "onUpdate"
+-- / "onUpdateTick", specTable) — NOT through Utils.* or addModEventListener, so neither the
+-- hook nor listener probe can see them (this is the field-work-implement tick's hiding spot).
+-- We wrap that registration and time the spec fn, routed through the SAME _hookCost path so it
+-- shows in mmHookCost / the spike log as "<specName> -> spec:onUpdate". Attribution: the spec's
+-- registered name via g_specializationManager (best), else the loading mod, else a stable id.
+-- Dedupe by fn (a spec fn is shared across vehicle types). Multi-return-safe, never pcalls fn.
+if _hookProbeArmed and type(SpecializationUtil) == "table"
+   and type(SpecializationUtil.registerEventListener) == "function" then
+    local _specWrapped = {}
+    local _SPEC_EVENTS = { onUpdate = true, onUpdateTick = true }
+    local _specSeq = 0
+
+    local function _specLabel(specTable)
+        local ok, nm = pcall(function()
+            local mgr = g_specializationManager
+            if mgr == nil then return nil end
+            for _, lst in ipairs({ mgr.specializationsByName, mgr.specializations }) do
+                if type(lst) == "table" then
+                    for k, e in pairs(lst) do
+                        if e == specTable then return (type(k) == "string") and k or nil end
+                        if type(e) == "table" and (e.object == specTable
+                           or e.specializationObject == specTable) then
+                            return e.name or ((type(k) == "string") and k or nil)
+                        end
+                    end
+                end
+            end
+            return nil
+        end)
+        if ok and type(nm) == "string" then return nm end
+        if g_currentModName ~= nil and g_currentModName ~= "" then return g_currentModName end
+        _specSeq = _specSeq + 1
+        return "spec#" .. _specSeq
+    end
+
+    local _orig_regEL = SpecializationUtil.registerEventListener
+    SpecializationUtil.registerEventListener = function(vehicleType, eventName, specTable)
+        if _SPEC_EVENTS[eventName] and type(specTable) == "table" then
+            local fn = specTable[eventName]
+            if type(fn) == "function" and not _specWrapped[fn] then
+                local label = _specLabel(specTable)
+                if not HIBERNATE_SKIP[label] then
+                    _specWrapped[fn] = true
+                    local wrapped = _wrapHookTiming(label, "spec:" .. eventName, fn)
+                    _specWrapped[wrapped] = true   -- don't re-wrap if a later type re-registers
+                    local _ek = label .. "|spec:" .. eventName
+                    if _hookCost[_ek] then _hookCost[_ek].specTable = specTable end  -- for lazy name resolve
+                    specTable[eventName] = wrapped
+                end
+            end
+        end
+        return _orig_regEL(vehicleType, eventName, specTable)
+    end
+    log("SPEC PROBE armed: timing specializations' onUpdate/onUpdateTick (→ mmHookCost).")
+end
+
+-- Resolve a spec module table → its registered name, via g_specializationManager (built
+-- once, lazily, at runtime when the manager is fully populated). Used by the per-frame
+-- rollup to relabel "spec#N" entries with real names (e.g. "cultivator", "mulching").
+local _specRevMap = nil
+local function _buildSpecRevMap()
+    _specRevMap = {}
+    local mgr = g_specializationManager
+    if type(mgr) ~= "table" then log("specmap: g_specializationManager type=" .. type(mgr)); return end
+    -- DIAGNOSTIC: dump the manager's top-level keys + a sample entry's fields, so even if
+    -- the match below misses we learn the real structure from one log line (MM data).
+    local mk = {}
+    for k, _ in pairs(mgr) do mk[#mk + 1] = tostring(k); if #mk >= 18 then break end end
+    log("specmap: g_specializationManager keys: " .. table.concat(mk, ","))
+    local lists = {}
+    if type(mgr.specializations) == "table" then lists[#lists + 1] = mgr.specializations end
+    if type(mgr.specializationsByName) == "table" then lists[#lists + 1] = mgr.specializationsByName end
+    if #lists == 0 then
+        for _, v in pairs(mgr) do if type(v) == "table" then lists[#lists + 1] = v end end  -- fallback scan
+    end
+    local scanned, mapped, sample = 0, 0, nil
+    for _, lst in ipairs(lists) do
+        for k, e in pairs(lst) do
+            scanned = scanned + 1
+            local name = (type(k) == "string") and k or nil
+            if type(e) == "table" then
+                if sample == nil then
+                    local f = {}
+                    for fk, fv in pairs(e) do f[#f + 1] = tostring(fk) .. "=" .. type(fv) end
+                    sample = "key=" .. tostring(k) .. " {" .. table.concat(f, ",") .. "}"
+                end
+                if name ~= nil and _specRevMap[e] == nil then _specRevMap[e] = name; mapped = mapped + 1 end
+                name = (type(e.name) == "string" and e.name) or name
+                local objs = { e.object, e.specializationObject, e.specialization }
+                if type(e.className) == "string" then objs[#objs + 1] = (rawget(_G, e.className) or _G[e.className]) end
+                for _, o in ipairs(objs) do
+                    if type(o) == "table" and name ~= nil and _specRevMap[o] == nil then
+                        _specRevMap[o] = name; mapped = mapped + 1
+                    end
+                end
+            end
+        end
+    end
+    log(string.format("specmap: scanned=%d mapped=%d sample=%s", scanned, mapped, tostring(sample)))
+end
+local function _resolveSpecName(specTable)
+    if specTable == nil then return nil end
+    if _specRevMap == nil then pcall(_buildSpecRevMap) end
+    return _specRevMap and _specRevMap[specTable] or nil
+end
+
 -- Curated TARGET functions to name (and allow vetoing). Bounded list — NOT every
 -- method of a class (a metatable __index can lead into a huge shared table and
 -- over-name). Grow from the conflict catalogue as needed.
@@ -610,7 +924,17 @@ local function patched(orig, existingFn, newFn, kind)
         return getTrampoline(target)
     end
 
-    local result = orig(existingFn, newFn)
+    -- Hook-cost probe: when armed, install the mod's impl wrapped in a (boolean-gated)
+    -- timing layer so we can measure its per-frame cost INSIDE the chain. record() still
+    -- stores the ORIGINAL newFn as the impl (display / distinct-impl tally are unchanged).
+    -- Widened beyond the named set: a periodic tick is usually ONE mod's solo work on a
+    -- function only it hooks (so not "contested"/named) — attribute those to the installer.
+    local implToInstall = newFn
+    if _hookProbeArmed then
+        local hookMod = mod or ((target == nil) and resolveMod()) or nil
+        if hookMod ~= nil then implToInstall = _wrapHookTiming(hookMod, target, newFn) end
+    end
+    local result = orig(existingFn, implToInstall)
     if target ~= nil and type(result) == "function" then
         record(result, existingFn, newFn, kind, target, mod, inferred)
     end
@@ -687,6 +1011,17 @@ local function coverageLog()
     log(string.format("CHAIN SUMMARY: %d targets active, %d target(s) have unknown hook(s)%s",
         nActive, #unknownList,
         (#unknownList > 0 and (": " .. table.concat(unknownList, ", ")) or ".")))
+
+    -- ── Hibernate coverage: how many listeners we can park live ───────────────
+    -- A non-trivial count here proves addModEventListener interception reached other
+    -- mods (cross-mod _G write worked). If this is ~0, parking won't catch anything —
+    -- the empirical check before we trust the feature.
+    do
+        local nL, nM = 0, 0
+        for _, lst in pairs(Utils.__ms_modListeners) do nM = nM + 1; nL = nL + #lst end
+        log(string.format("HIBERNATE: gated %d listener(s) across %d mod(s) — park any live via the "
+            .. "Switchboard or  mmHibernate <ModName>  (mmHibernateList for names).", nL, nM))
+    end
 
     -- ── HIDDEN HOOK vs per-type DUPE detection ────────────────────────────────
     -- For every target carrying an unknown, decide which of two very different things
@@ -792,6 +1127,47 @@ local function coverageLog()
     end
 end
 
+-- Fallback hibernate registration: if registration interception didn't reach other
+-- mods, enumerate the engine's listener list at map-load and gate each listener we can
+-- attribute to a mod by scanning mod env namespaces (a mod's listener is usually a
+-- table field of its env, _G[modName].<field> == listener). Best-effort; logs coverage.
+-- Runs ONCE at loadMission00Finished, before coverageLog (so its gated count is final).
+local function _hibernateFallbackScan()
+    local list = safeGlobal("g_modEventListeners")
+    log("hibernate fallback: g_modEventListeners type=" .. type(list)
+        .. (type(list) == "table" and (" count=" .. tostring(#list)) or ""))
+    if type(list) ~= "table" or #list == 0 then return end
+    -- object -> modName via a one-level scan of each installed mod's env namespace.
+    local objToMod = {}
+    if g_modManager ~= nil and type(g_modManager.mods) == "table" then
+        for _, mod in ipairs(g_modManager.mods) do
+            local modName = mod and mod.modName
+            local env = modName and safeGlobal(modName)
+            if type(env) == "table" then
+                pcall(function()
+                    for _, v in pairs(env) do
+                        if type(v) == "table" and objToMod[v] == nil then objToMod[v] = modName end
+                    end
+                end)
+            end
+        end
+    end
+    local newlyGated, unattributed = 0, 0
+    for _, listener in ipairs(list) do
+        if type(listener) == "table" and not _gatedListeners[listener] then
+            local modName = objToMod[listener]
+            if modName ~= nil and not HIBERNATE_SKIP[modName] then
+                pcall(_registerHibernatable, modName, listener)
+                newlyGated = newlyGated + 1
+            else
+                unattributed = unattributed + 1
+            end
+        end
+    end
+    log(string.format("hibernate fallback: gated %d listener(s) via enumeration, %d unattributed "
+        .. "(local/unnamed listeners we can't pin to a mod).", newlyGated, unattributed))
+end
+
 if Mission00 ~= nil and type(Mission00.loadMission00Finished) == "function" and _orig_append then
     -- pcall wrapper: coverageLog is diagnostic only — an error here must NEVER
     -- propagate into loadMission00Finished and hang the load sequence.
@@ -802,6 +1178,7 @@ if Mission00 ~= nil and type(Mission00.loadMission00Finished) == "function" and 
                 .. "install): %s", #_pending, table.concat(_pending, ", ")))
         end
         _sealed = true             -- everything that will exist is defined now; stop retrying
+        pcall(_hibernateFallbackScan)   -- gate listeners reg-interception missed
         local ok, err = pcall(coverageLog)
         if not ok then log("coverageLog error (non-fatal): " .. tostring(err)) end
     end)
@@ -878,6 +1255,40 @@ function MMSaveGuard:loadMap(name)
 end
 
 function MMSaveGuard:update(dt)
+    -- Frame-time tracker (runs ALWAYS, even in safe mode): dt = wall-clock ms this frame =
+    -- the per-frame "cycle time" + gives FPS. Reset by mmCostReset; shown atop mmCost. This
+    -- listener is never gated (we skip ourselves), so it's a reliable per-frame tick.
+    local _f = Utils.__ms_frame
+    -- Clamp out pause/load frames so the average isn't poisoned: a real frame is < 1000ms
+    -- even at 1fps; anything above is the game PAUSED (alt-tab, loading), not a slow frame.
+    if _f ~= nil and dt ~= nil and dt > 0 and dt < 1000 then
+        _f.acc = _f.acc + dt; _f.n = _f.n + 1
+        if dt > (_f.maxMs or 0) then _f.maxMs = dt end   -- worst frame = the tick's magnitude
+    end
+    -- Hook-probe per-frame rollup (only when armed + on): fold each mod's accumulated hook
+    -- time THIS frame into its peak + spike detection, then reset. Catches a periodic hook
+    -- tick whether concentrated in one call or spread across many vehicles in the frame.
+    if _hp.on and _now ~= nil then
+        local hnow = _now()
+        for _, c in pairs(_hookCost) do
+            if c.specTable ~= nil and not c.specResolved then   -- relabel spec#N → real name, once
+                c.specResolved = true
+                local nm = _resolveSpecName(c.specTable)
+                if nm ~= nil then c.mod = nm end
+            end
+            local fMs = (c.frameT or 0) * 1000
+            if fMs > (c.maxMs or 0) then c.maxMs = fMs end
+            if fMs > SPIKE_MS then
+                c.spikes = (c.spikes or 0) + 1
+                if hnow - (c.lastSpikeT or 0) > 1.0 then
+                    c.lastSpikeT = hnow
+                    print(string.format("[ModMixer HOOK SPIKE] %s -> %s used %.1f ms this frame "
+                        .. "(periodic tick suspect)", c.mod, c.target, fMs))
+                end
+            end
+            c.frameT = 0
+        end
+    end
     if _safeModeActive or not _leversActive then return end   -- nothing we did could brick this boot
     if g_currentMission == nil then return end
     if not MMSaveGuard.wrapped then pcall(_installSaveBlock) end
