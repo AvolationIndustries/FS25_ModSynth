@@ -386,7 +386,7 @@ end
 local TIER_LEGEND = {
     seating  = "SIMPLE \226\128\148 rank your mods; a higher seat wins its conflicts everywhere. Switch View top-left.",
     category = "BY CATEGORY \226\128\148 settle one realm at a time. Change winner picks a fight; Promote/Move ranks within the realm; shared stacks all run.",
-    advanced = "ADVANCED \226\128\148 #/# = firing position; [ow] wraps inner (safe); [ow!] MIGHT stomp; \226\154\160 [STOMPED] = confirmed (ran without calling the others). Move reorders, Make-Winner mutes \226\128\148 both restart.",
+    advanced = "ADVANCED \226\128\148 #/# = firing position; [ow] wraps inner (safe); \226\154\160 [ow!] = positioned to override the mods below it (potential stomp). Move reorders, Make-Winner mutes \226\128\148 both restart.",
     review   = "REVIEW \226\128\148 things worth a look: duplicate-purpose mods, incompatible pairs, HUD overlaps. Select a row for the evidence; Dismiss (Space) hides ones you've judged.",
     performance = "PERFORMANCE \226\128\148 live per-mod cost (ms/frame) vs your 60fps budget. Heaviest first. Park (Space) gates a mod's per-frame work to reclaim it. Resets its window when you open the tab.",
 }
@@ -423,6 +423,19 @@ function ModMixerSwitchboardFrame:onGuiSetupFinished()
             self:updateHelp()
         end
     end
+    -- VIEW tabs: the active tier highlights via getIsSelected (RedTape's recipe) — the GUI
+    -- draws a button's text in its textSelectedColor when getIsSelected() returns true. It
+    -- reads the LIVE mode, so the highlight stays correct with no per-switch bookkeeping.
+    local tabs  = { self.tab1, self.tab2, self.tab3, self.tab4, self.tab5 }
+    local modes = { "seating", "category", "advanced", "review", "performance" }
+    for i, btn in ipairs(tabs) do
+        if btn ~= nil then
+            local m = modes[i]
+            btn.getIsSelected = function()
+                return ModMixerSwitchboard ~= nil and ModMixerSwitchboard.mode == m
+            end
+        end
+    end
 end
 
 -- Help box (top-right): explain the selected row in plain English.
@@ -438,6 +451,7 @@ function ModMixerSwitchboardFrame:updateChrome()
     if self.headerInfo ~= nil then
         pcall(function() self.headerInfo:setText(TIER_LEGEND[mode] or "") end)
     end
+    -- (VIEW tab highlight is handled by the getIsSelected override in onGuiSetupFinished.)
     if self.tierSwitch ~= nil then
         local idx = (mode == "seating" and 1) or (mode == "category" and 2)
                  or (mode == "advanced" and 3) or (mode == "review" and 4) or 5
@@ -466,6 +480,27 @@ function ModMixerSwitchboardFrame:onTierSwitchChanged(state)
     self:updateHelp()
     self:setMenuButtonInfoDirty()
 end
+
+-- VIEW tabs: each tab calls switchTier with its mode. Same flow as onTierSwitchChanged
+-- (set mode, fresh window for Performance, rebuild + chrome refresh).
+function ModMixerSwitchboardFrame:switchTier(mode)
+    if ModMixerSwitchboard ~= nil and ModMixerSwitchboard.setMode ~= nil then
+        ModMixerSwitchboard.setMode(mode)
+    end
+    if mode == "performance" and ModMixerSwitchboard ~= nil and ModMixerSwitchboard.resetCostWindow ~= nil then
+        pcall(ModMixerSwitchboard.resetCostWindow)
+    end
+    self:rebuildFilterCats()
+    self:refresh()
+    self:updateChrome()
+    self:updateHelp()
+    self:setMenuButtonInfoDirty()
+end
+function ModMixerSwitchboardFrame:onTab1() self:switchTier("seating")     end
+function ModMixerSwitchboardFrame:onTab2() self:switchTier("category")    end
+function ModMixerSwitchboardFrame:onTab3() self:switchTier("advanced")    end
+function ModMixerSwitchboardFrame:onTab4() self:switchTier("review")      end
+function ModMixerSwitchboardFrame:onTab5() self:switchTier("performance") end
 
 function ModMixerSwitchboardFrame:initialize()
     ModMixerSwitchboardFrame:superClass().initialize(self)
@@ -962,20 +997,11 @@ function ModMixerSwitchboardFrame:collectRows()
                 local isStompRisk = (thisKind == "overwrite") and consecutive and (orderIdx or 1) > 1
                 local kindTag = ""
                 if thisKind == "overwrite" then
-                    -- Runtime verdict refines the static [ow!] guess: did this overwrite actually
-                    -- call superFunc when it first ran? true = confirmed STOMP, false = it chains.
-                    local verdict
-                    if type(Utils) == "table" and type(Utils.__ms_stompVerdict) == "table"
-                       and type(Utils.__ms_stompVerdict[target]) == "table" then
-                        verdict = Utils.__ms_stompVerdict[target][modName]
-                    end
-                    if verdict == true then
-                        kindTag = "  \226\154\160 [STOMPED]"; isStompRisk = true
-                    elseif verdict == false then
-                        kindTag = " [ow]"; isStompRisk = false       -- observed calling through: safe
-                    else
-                        kindTag = isStompRisk and "  \226\154\160 [ow!]" or " [ow]"   -- \226\154\160 = warning
-                    end
+                    -- STATIC estimate (we don't confirm at runtime — substituting our wrapper on
+                    -- the overwrite hot path hangs the load; see ModMixerHooks STOMP VERDICT MAP).
+                    -- The outermost overwrite on a contested target is positioned to discard the
+                    -- mods below it = [ow!]; an innermost / lone overwrite only wraps base = [ow].
+                    kindTag = isStompRisk and "  \226\154\160 [ow!]" or " [ow]"   -- \226\154\160 = warning sign
                 end
 
                 local stateText

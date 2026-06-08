@@ -12,11 +12,14 @@
             <Text profile="fs25_menuHeaderTitle" id="categoryHeaderText"/>
         </GuiElement>
 
-        <!-- VIEW tier switch (Simple / By category / Advanced) — its own widget under
-             the header, NOT a chart row. Click the arrows to change tier. -->
-        <Text profile="ModMixer_colHeader" text="VIEW" position="20px -62px" size="70px 24px"/>
-        <MultiTextOption profile="ModMixer_categoryFilter" id="tierSwitch"
-                         position="86px -60px" size="380px 34px" onClick="onTierSwitchChanged"/>
+        <!-- VIEW tabs: one click each (Simple / Category / Advanced / Review / Performance).
+             The active tab is tinted green by the frame (updateChrome). Kept left of the help
+             box (x<580). Replaces the old arrow-cycling MultiTextOption. -->
+        <Button profile="ModMixer_tab" id="tab1" text="Simple"      position="20px -60px"  size="90px 34px"  onClick="onTab1"/>
+        <Button profile="ModMixer_tab" id="tab2" text="Category"    position="115px -60px" size="105px 34px" onClick="onTab2"/>
+        <Button profile="ModMixer_tab" id="tab3" text="Advanced"    position="225px -60px" size="110px 34px" onClick="onTab3"/>
+        <Button profile="ModMixer_tab" id="tab4" text="Review"      position="340px -60px" size="90px 34px"  onClick="onTab4"/>
+        <Button profile="ModMixer_tab" id="tab5" text="Performance" position="435px -60px" size="135px 34px" onClick="onTab5"/>
 
         <!-- Category pager (Tier 2 only): page with the menu's prev/next or the arrows. -->
         <MultiTextOption profile="ModMixer_categoryFilter" id="categoryFilter"

@@ -872,26 +872,22 @@ end
 -- stomp. After that one shot the wrapper is byte-for-byte the stock behaviour
 -- (impl(superFunc, ...)), so there's zero ongoing cost. Disabled in safe mode (recovery).
 -- ─────────────────────────────────────────────────────────────────────────────
-Utils.__ms_stompVerdict = Utils.__ms_stompVerdict or {}   -- [target][mod] = true(stomped)/false(chained)
-local _stompV = Utils.__ms_stompVerdict
-
-local function _recordStomp(target, mod, h, ...)
-    local v = _stompV[target]
-    if v == nil then v = {}; _stompV[target] = v end
-    v[mod] = not h.ran            -- inner never ran => this overwrite stomped what's below it
-    return ...                    -- multi-return preserved (varargs, nils intact)
-end
-
-local function _makeStompDetectingOverwrite(superFunc, impl, target, mod)
-    local probed = false
-    return function(...)
-        if probed then return impl(superFunc, ...) end   -- steady state == stock wrapper
-        probed = true
-        local h = { ran = false }
-        local tracked = function(...) h.ran = true; return superFunc(...) end
-        return _recordStomp(target, mod, h, impl(tracked, ...))
-    end
-end
+-- STOMP VERDICT MAP — kept as an (intentionally never-populated) table so the Advanced view's
+-- lookup stays safe. We deliberately do NOT confirm stomps at runtime.
+--
+-- WHY NOT: confirming "did this overwrite call through?" means replacing GIANTS' overwrite
+-- wrapper for the ~100 contested functions. On a real stack that SILENTLY HANGS the async map
+-- i3d load at ~20% — reproduced on 2026-06-08 with two independent, sound wrapper designs:
+--   (1) wrapped-super (hand the impl a tracked super), and
+--   (2) identity-safe run-ledger (impl gets the REAL super byte-for-byte; detection lives in
+--       our own wrapper via a per-link sequence stamp).
+-- Both hang identically, with no Lua error — so the cause is not super identity, it is the mere
+-- act of substituting our closure on that hot path during the fragile async-load phase. The
+-- juice is not worth the squeeze: a published mod must never risk a user's load to confirm a
+-- guess. The Advanced view shows the STATIC estimate instead — the outermost overwrite on a
+-- contested target is [ow!] (positioned to discard the mods below it), which is the actionable
+-- signal the user actually asked for.
+Utils.__ms_stompVerdict = Utils.__ms_stompVerdict or {}   -- intentionally never populated
 
 -- The one place that names the target, checks veto/reorder, and skips, buffers,
 -- or installs.
@@ -959,16 +955,9 @@ local function patched(orig, existingFn, newFn, kind)
         local hookMod = mod or ((target == nil) and resolveMod()) or nil
         if hookMod ~= nil then implToInstall = _wrapHookTiming(hookMod, target, newFn) end
     end
-    -- Overwrites get our own chain wrapper so the stomp detector can observe whether this
-    -- overwrite calls superFunc. Load-critical chains + safe mode stay on the stock path.
-    -- Append/prepend can't stomp (they don't receive superFunc), so they use orig.
-    local result
-    if kind == "overwrite" and target ~= nil and mod ~= nil
-       and not isLoadCritical(target) and not _safeModeActive then
-        result = _makeStompDetectingOverwrite(existingFn, implToInstall, target, mod)
-    else
-        result = orig(existingFn, implToInstall)
-    end
+    -- Always install via GIANTS' own wrapper (orig). We never substitute our closure on the
+    -- overwrite hot path — see the STOMP VERDICT MAP note above for why (it hangs the load).
+    local result = orig(existingFn, implToInstall)
     if target ~= nil and type(result) == "function" then
         record(result, existingFn, newFn, kind, target, mod, inferred)
     end
