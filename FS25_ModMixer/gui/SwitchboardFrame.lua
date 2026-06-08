@@ -423,16 +423,23 @@ function ModMixerSwitchboardFrame:onGuiSetupFinished()
             self:updateHelp()
         end
     end
-    -- VIEW tabs: the active tier highlights via getIsSelected (RedTape's recipe) — the GUI
-    -- draws a button's text in its textSelectedColor when getIsSelected() returns true. It
-    -- reads the LIVE mode, so the highlight stays correct with no per-switch bookkeeping.
+    -- VIEW tabs (RedTape's recipe): the active tier highlights via getIsSelected. The GUI paints
+    -- a tab's TEXT in its textSelectedColor (black) when the BUTTON's getIsSelected() is true,
+    -- and its background bitmap in its imageSelectedColor (green) when the "background" child's
+    -- getIsSelected() is true — so we override BOTH. Reads the LIVE mode, so the highlight stays
+    -- correct with no per-switch bookkeeping.
     local tabs  = { self.tab1, self.tab2, self.tab3, self.tab4, self.tab5 }
     local modes = { "seating", "category", "advanced", "review", "performance" }
     for i, btn in ipairs(tabs) do
         if btn ~= nil then
             local m = modes[i]
-            btn.getIsSelected = function()
+            local isSel = function()
                 return ModMixerSwitchboard ~= nil and ModMixerSwitchboard.mode == m
+            end
+            btn.getIsSelected = isSel
+            if btn.getDescendantByName ~= nil then
+                local bg = btn:getDescendantByName("background")
+                if bg ~= nil then bg.getIsSelected = isSel end   -- drives the green fill
             end
         end
     end

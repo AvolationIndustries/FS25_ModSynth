@@ -12,23 +12,36 @@
             <Text profile="fs25_menuHeaderTitle" id="categoryHeaderText"/>
         </GuiElement>
 
-        <!-- VIEW tabs: one click each (Simple / Category / Advanced / Review / Performance).
-             The active tab is tinted green by the frame (updateChrome). Kept left of the help
-             box (x<580). Replaces the old arrow-cycling MultiTextOption. -->
-        <Button profile="ModMixer_tab" id="tab1" text="Simple"      position="20px -60px"  size="90px 34px"  onClick="onTab1"/>
-        <Button profile="ModMixer_tab" id="tab2" text="Category"    position="115px -60px" size="105px 34px" onClick="onTab2"/>
-        <Button profile="ModMixer_tab" id="tab3" text="Advanced"    position="225px -60px" size="110px 34px" onClick="onTab3"/>
-        <Button profile="ModMixer_tab" id="tab4" text="Review"      position="340px -60px" size="90px 34px"  onClick="onTab4"/>
-        <Button profile="ModMixer_tab" id="tab5" text="Performance" position="435px -60px" size="135px 34px" onClick="onTab5"/>
+        <!-- VIEW tabs (stock RedTape recipe): fs25_subCategorySelectorTabbedTab buttons, each
+             with a nested "background" bitmap (fs25_subCategorySelectorTabbedTabBg). Inactive =
+             white text, transparent fill; selected = green fill + black text. The frame overrides
+             getIsSelected on BOTH the button (text) and its background (fill) in
+             onGuiSetupFinished so they follow the live mode. Kept left of the help box (x<580). -->
+        <Button profile="ModMixer_tab" id="tab1" text="Simple"      position="20px -58px"  size="90px 40px"  onClick="onTab1">
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
+        </Button>
+        <Button profile="ModMixer_tab" id="tab2" text="Category"    position="114px -58px" size="110px 40px" onClick="onTab2">
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
+        </Button>
+        <Button profile="ModMixer_tab" id="tab3" text="Advanced"    position="228px -58px" size="110px 40px" onClick="onTab3">
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
+        </Button>
+        <Button profile="ModMixer_tab" id="tab4" text="Review"      position="342px -58px" size="88px 40px"  onClick="onTab4">
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
+        </Button>
+        <Button profile="ModMixer_tab" id="tab5" text="Performance" position="434px -58px" size="144px 40px" onClick="onTab5">
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
+        </Button>
 
         <!-- Category pager (Tier 2 only): page with the menu's prev/next or the arrows. -->
         <MultiTextOption profile="ModMixer_categoryFilter" id="categoryFilter"
                          position="20px -104px" size="520px 34px" onClick="onFilterChanged"/>
 
-        <!-- Feature help box — top right, above the chart (sits above the column headers
-             at -150). Updated on row selection. -->
+        <!-- Feature help box — lifted up into the empty top-right band (right of the title,
+             above the tab row; +Y = up in this frame). Clear of the title (ends ~610px) and the
+             tabs (end ~578px). Updated on row selection. -->
         <Text profile="ModMixer_helpBox" id="featureHelp" text=""
-              position="580px -56px" size="920px 88px"/>
+              position="690px 66px" size="820px 168px"/>
 
         <Text profile="ModMixer_colHeader" text="MOD"     position="20px -150px"   size="500px 24px"/>
         <Text profile="ModMixer_colHeader" text="FEATURE" position="530px -150px"  size="440px 24px"/>
