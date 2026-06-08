@@ -342,43 +342,35 @@ end
 local _specRevMap = nil
 local function _buildSpecRevMap()
     _specRevMap = {}
-    local mgr = g_specializationManager
-    if type(mgr) ~= "table" then log("specmap: g_specializationManager type=" .. type(mgr)); return end
-    -- DIAGNOSTIC: dump the manager's top-level keys + a sample entry's fields, so even if
-    -- the match below misses we learn the real structure from one log line (MM data).
-    local mk = {}
-    for k, _ in pairs(mgr) do mk[#mk + 1] = tostring(k); if #mk >= 18 then break end end
-    log("specmap: g_specializationManager keys: " .. table.concat(mk, ","))
-    local lists = {}
-    if type(mgr.specializations) == "table" then lists[#lists + 1] = mgr.specializations end
-    if type(mgr.specializationsByName) == "table" then lists[#lists + 1] = mgr.specializationsByName end
-    if #lists == 0 then
-        for _, v in pairs(mgr) do if type(v) == "table" then lists[#lists + 1] = v end end  -- fallback scan
-    end
-    local scanned, mapped, sample = 0, 0, nil
-    for _, lst in ipairs(lists) do
-        for k, e in pairs(lst) do
-            scanned = scanned + 1
-            local name = (type(k) == "string") and k or nil
-            if type(e) == "table" then
-                if sample == nil then
-                    local f = {}
-                    for fk, fv in pairs(e) do f[#f + 1] = tostring(fk) .. "=" .. type(fv) end
-                    sample = "key=" .. tostring(k) .. " {" .. table.concat(f, ",") .. "}"
-                end
-                if name ~= nil and _specRevMap[e] == nil then _specRevMap[e] = name; mapped = mapped + 1 end
-                name = (type(e.name) == "string" and e.name) or name
-                local objs = { e.object, e.specializationObject, e.specialization }
-                if type(e.className) == "string" then objs[#objs + 1] = (rawget(_G, e.className) or _G[e.className]) end
-                for _, o in ipairs(objs) do
-                    if type(o) == "table" and name ~= nil and _specRevMap[o] == nil then
-                        _specRevMap[o] = name; mapped = mapped + 1
+    -- Scan ALL THREE spec managers (vehicle / placeable / hand-tool) so placeable + handtool
+    -- specs resolve to names too, not just vehicle ones (the main source of leftover spec#N).
+    local mgrs = { g_specializationManager, g_placeableSpecializationManager, g_handToolSpecializationManager }
+    local scanned, mapped = 0, 0
+    for _, mgr in ipairs(mgrs) do
+        if type(mgr) == "table" then
+            local lists = {}
+            if type(mgr.specializations) == "table" then lists[#lists + 1] = mgr.specializations end
+            if type(mgr.specializationsByName) == "table" then lists[#lists + 1] = mgr.specializationsByName end
+            for _, lst in ipairs(lists) do
+                for k, e in pairs(lst) do
+                    scanned = scanned + 1
+                    local name = (type(k) == "string") and k or nil
+                    if type(e) == "table" then
+                        if name ~= nil and _specRevMap[e] == nil then _specRevMap[e] = name; mapped = mapped + 1 end
+                        name = (type(e.name) == "string" and e.name) or name
+                        local objs = { e.object, e.specializationObject, e.specialization }
+                        if type(e.className) == "string" then objs[#objs + 1] = (rawget(_G, e.className) or _G[e.className]) end
+                        for _, o in ipairs(objs) do
+                            if type(o) == "table" and name ~= nil and _specRevMap[o] == nil then
+                                _specRevMap[o] = name; mapped = mapped + 1
+                            end
+                        end
                     end
                 end
             end
         end
     end
-    log(string.format("specmap: scanned=%d mapped=%d sample=%s", scanned, mapped, tostring(sample)))
+    log(string.format("specmap: scanned=%d mapped=%d (vehicle+placeable+handtool managers)", scanned, mapped))
 end
 local function _resolveSpecName(specTable)
     if specTable == nil then return nil end
@@ -872,6 +864,35 @@ local function getTrampoline(target)
     return buf._tramp
 end
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- STOMP DETECTOR — turn the static "[ow!] MIGHT stomp" guess into a runtime VERDICT.
+-- For a non-load-critical overwrite we build the chain OURSELVES so we can hand the mod's
+-- function a TRACKED superFunc and watch (one-shot, on the first call) whether it actually
+-- calls through. If it ran WITHOUT calling super, it discarded the mods below it = CONFIRMED
+-- stomp. After that one shot the wrapper is byte-for-byte the stock behaviour
+-- (impl(superFunc, ...)), so there's zero ongoing cost. Disabled in safe mode (recovery).
+-- ─────────────────────────────────────────────────────────────────────────────
+Utils.__ms_stompVerdict = Utils.__ms_stompVerdict or {}   -- [target][mod] = true(stomped)/false(chained)
+local _stompV = Utils.__ms_stompVerdict
+
+local function _recordStomp(target, mod, h, ...)
+    local v = _stompV[target]
+    if v == nil then v = {}; _stompV[target] = v end
+    v[mod] = not h.ran            -- inner never ran => this overwrite stomped what's below it
+    return ...                    -- multi-return preserved (varargs, nils intact)
+end
+
+local function _makeStompDetectingOverwrite(superFunc, impl, target, mod)
+    local probed = false
+    return function(...)
+        if probed then return impl(superFunc, ...) end   -- steady state == stock wrapper
+        probed = true
+        local h = { ran = false }
+        local tracked = function(...) h.ran = true; return superFunc(...) end
+        return _recordStomp(target, mod, h, impl(tracked, ...))
+    end
+end
+
 -- The one place that names the target, checks veto/reorder, and skips, buffers,
 -- or installs.
 local function patched(orig, existingFn, newFn, kind)
@@ -938,7 +959,16 @@ local function patched(orig, existingFn, newFn, kind)
         local hookMod = mod or ((target == nil) and resolveMod()) or nil
         if hookMod ~= nil then implToInstall = _wrapHookTiming(hookMod, target, newFn) end
     end
-    local result = orig(existingFn, implToInstall)
+    -- Overwrites get our own chain wrapper so the stomp detector can observe whether this
+    -- overwrite calls superFunc. Load-critical chains + safe mode stay on the stock path.
+    -- Append/prepend can't stomp (they don't receive superFunc), so they use orig.
+    local result
+    if kind == "overwrite" and target ~= nil and mod ~= nil
+       and not isLoadCritical(target) and not _safeModeActive then
+        result = _makeStompDetectingOverwrite(existingFn, implToInstall, target, mod)
+    else
+        result = orig(existingFn, implToInstall)
+    end
     if target ~= nil and type(result) == "function" then
         record(result, existingFn, newFn, kind, target, mod, inferred)
     end

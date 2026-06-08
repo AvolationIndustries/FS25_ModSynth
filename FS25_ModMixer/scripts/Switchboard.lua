@@ -1119,11 +1119,61 @@ function SB.consoleCostReset(_)
     return "ModMixer: all cost/frame/hook/spec accumulators reset. Play ~30s, then mmLoad / mmCost / mmPeaks."
 end
 
+-- Class-prefixes that belong to each shared spec, so a "game system" row can list the mods
+-- plugging into it: per-mod cost from the hook probe on those named functions (where timed),
+-- plus structural hookers from the offline hookmap (where not). Curated for heavy systems.
+local SPEC_CLASSES = {
+    wheels         = { "WheelPhysics", "WheelsUtil" },
+    motorized      = { "Motorized", "VehicleMotor", "PowerConsumer" },
+    drivable       = { "Drivable" },
+    wearable       = { "Wearable" },
+    attacherJoints = { "AttacherJoints" },
+    fillUnit       = { "FillUnit" },
+    dashboard      = { "Dashboard" },
+    workArea       = { "WorkArea", "Sprayer", "Cutter", "Cultivator", "SowingMachine", "Plow", "Mower", "Tedder", "Baler" },
+}
+
+-- Mods plugging into a shared spec: { timed = {{mod, ms}, ...}, untimed = { mod, ... } }.
+-- timed = measured per-mod cost from the hook probe on the spec's named functions; untimed =
+-- structural hookers (hookmap) we didn't time. nil if the spec has no curated class map.
+function SB.specContributors(specName, frames)
+    local classes = SPEC_CLASSES[specName]
+    if classes == nil then return nil end
+    local classSet = {}
+    for _, c in ipairs(classes) do classSet[c] = true end
+    local function classOf(t) return (type(t) == "string") and t:match("^([^.]+)%.") or nil end
+    local timed = {}
+    if type(Utils) == "table" and type(Utils.__ms_hookCost) == "table" and frames and frames > 0 then
+        for _, c in pairs(Utils.__ms_hookCost) do
+            local k = classOf(c.target)
+            if k and classSet[k] then timed[c.mod] = (timed[c.mod] or 0) + (c.t or 0) / frames * 1000 end
+        end
+    end
+    local structural = {}
+    if type(ModMixerHookMap) == "table" then
+        for target, mods in pairs(ModMixerHookMap) do
+            local k = classOf(target)
+            if k and classSet[k] and type(mods) == "table" then
+                for _, m in ipairs(mods) do structural[m] = true end
+            end
+        end
+    end
+    local timedList = {}
+    for mod, ms in pairs(timed) do timedList[#timedList + 1] = { mod = mod, ms = ms } end
+    table.sort(timedList, function(a, b) return a.ms > b.ms end)
+    local untimed = {}
+    for mod in pairs(structural) do if timed[mod] == nil then untimed[#untimed + 1] = mod end end
+    table.sort(untimed)
+    return { timed = timedList, untimed = untimed }
+end
+
 -- Data for the Performance tier: frame summary + per-mod/per-spec cost (avg ms/frame over
 -- the window), sorted heaviest first. Same math as mmLoad. probeArmed = hook/spec timing
 -- is installed (file-armed); when false only listener cost is measured.
 function SB.buildPerformanceRows()
     local out = { mods = {}, frameMs = 0, fps = 0, frames = 0, totalMs = 0, budgetPct = 0,
+                  installedCount = (type(g_modManager) == "table" and type(g_modManager.mods) == "table")
+                      and #g_modManager.mods or 0,
                   probeArmed = (type(Utils) == "table" and Utils.__ms_hookArmed == true) }
     if type(Utils) ~= "table" or type(Utils.__ms_frame) ~= "table" then return out end
     local frames = Utils.__ms_frame.n or 0
@@ -1131,21 +1181,32 @@ function SB.buildPerformanceRows()
     if frames < 1 then return out end
     out.frameMs = (Utils.__ms_frame.acc or 0) / frames   -- dt is already ms (per-mod cost is in s → ×1000)
     out.fps = (out.frameMs > 0) and (1000 / out.frameMs) or 0
+    -- Aggregate per name, tracking whether it's a MOD (has listener / non-spec hook cost)
+    -- or a GAME SYSTEM (cost comes only from a spec onUpdate/onUpdateTick = a shared base
+    -- specialization that mods plug into, e.g. "wheels", "motorized").
     local perMod = {}
+    local function bump(name, ms, fromSpec)
+        local e = perMod[name]
+        if e == nil then e = { ms = 0, isSpec = true }; perMod[name] = e end
+        e.ms = e.ms + ms
+        if not fromSpec then e.isSpec = false end
+    end
     if type(Utils.__ms_cost) == "table" then
         for mod, c in pairs(Utils.__ms_cost) do
             local ms = ((c.upd or 0) + (c.drw or 0)) / frames * 1000
-            if ms > 0.001 then perMod[mod] = (perMod[mod] or 0) + ms end
+            if ms > 0.001 then bump(mod, ms, false) end   -- listeners are mods
         end
     end
     if type(Utils.__ms_hookCost) == "table" then
         for _, c in pairs(Utils.__ms_hookCost) do
             local ms = (c.t or 0) / frames * 1000
-            if ms > 0.001 then perMod[c.mod] = (perMod[c.mod] or 0) + ms end
+            if ms > 0.001 then
+                bump(c.mod, ms, type(c.target) == "string" and c.target:sub(1, 5) == "spec:")
+            end
         end
     end
     local rows, total = {}, 0
-    for mod, ms in pairs(perMod) do rows[#rows + 1] = { mod = mod, ms = ms }; total = total + ms end
+    for name, e in pairs(perMod) do rows[#rows + 1] = { mod = name, ms = e.ms, isSpec = e.isSpec }; total = total + e.ms end
     table.sort(rows, function(a, b) return a.ms > b.ms end)
     out.mods = rows
     out.totalMs = total

@@ -121,7 +121,16 @@ function RowSource:populateCellForItemInSection(list, section, index, cell)
             end
         end
     else
-        if stateEl ~= nil then stateEl:setText(row.stateText) end
+        if stateEl ~= nil then
+            stateEl:setText(row.stateText)
+            -- Stomp-risk rows: paint the STATE red so the [ow!] warning jumps out. Reset the
+            -- others explicitly (list cells are recycled, so a previously-red cell must clear).
+            if row.stompRisk then
+                pcall(function() stateEl:setTextColor(0.95, 0.26, 0.21, 1) end)
+            else
+                pcall(function() stateEl:setTextColor(0.86, 0.88, 0.92, 1) end)
+            end
+        end
         if fillEl  ~= nil then pcall(function() fillEl:setVisible(false) end) end
     end
 end
@@ -348,6 +357,15 @@ local function helpForRow(row)
     elseif rt == "reviewInfo" then
         return row.featureLabel or ""
     elseif rt == "perfMod" then
+        if row.perfIsSpec then
+            local base = "GAME SYSTEM (shared spec) \226\128\148 NOT a mod. Cost = base work + every mod that plugs in."
+            if row.perfContributors ~= nil and row.perfContributors ~= "" then
+                return base .. "\nPlugged into by \226\128\148 " .. row.perfContributors
+                    .. "\n(ms = that mod's measured cost on this system's functions; the rest is base + inline spec work.)"
+            end
+            return base .. " e.g. REA / DDP / SeasonalTires all modify 'wheels'. Not parkable \226\128\148 reduce by "
+                .. "removing mods that load this system."
+        end
         local s = "COST \226\128\148 this mod's measured per-frame script cost (ms/frame), this window.\n"
         if row.perfParkable then
             s = s .. "Park (Space) gates its per-frame work LIVE; press again to wake. \226\154\160 Don't park a mod "
@@ -368,7 +386,7 @@ end
 local TIER_LEGEND = {
     seating  = "SIMPLE \226\128\148 rank your mods; a higher seat wins its conflicts everywhere. Switch View top-left.",
     category = "BY CATEGORY \226\128\148 settle one realm at a time. Change winner picks a fight; Promote/Move ranks within the realm; shared stacks all run.",
-    advanced = "ADVANCED \226\128\148 #/# = firing position; [ow] overwrites (wraps inner); [ow!] may STOMP inner mods. Move reorders (restart). Make-Winner mutes others (restart).",
+    advanced = "ADVANCED \226\128\148 #/# = firing position; [ow] wraps inner (safe); [ow!] MIGHT stomp; \226\154\160 [STOMPED] = confirmed (ran without calling the others). Move reorders, Make-Winner mutes \226\128\148 both restart.",
     review   = "REVIEW \226\128\148 things worth a look: duplicate-purpose mods, incompatible pairs, HUD overlaps. Select a row for the evidence; Dismiss (Space) hides ones you've judged.",
     performance = "PERFORMANCE \226\128\148 live per-mod cost (ms/frame) vs your 60fps budget. Heaviest first. Park (Space) gates a mod's per-frame work to reclaim it. Resets its window when you open the tab.",
 }
@@ -944,7 +962,20 @@ function ModMixerSwitchboardFrame:collectRows()
                 local isStompRisk = (thisKind == "overwrite") and consecutive and (orderIdx or 1) > 1
                 local kindTag = ""
                 if thisKind == "overwrite" then
-                    kindTag = isStompRisk and " [ow!]" or " [ow]"
+                    -- Runtime verdict refines the static [ow!] guess: did this overwrite actually
+                    -- call superFunc when it first ran? true = confirmed STOMP, false = it chains.
+                    local verdict
+                    if type(Utils) == "table" and type(Utils.__ms_stompVerdict) == "table"
+                       and type(Utils.__ms_stompVerdict[target]) == "table" then
+                        verdict = Utils.__ms_stompVerdict[target][modName]
+                    end
+                    if verdict == true then
+                        kindTag = "  \226\154\160 [STOMPED]"; isStompRisk = true
+                    elseif verdict == false then
+                        kindTag = " [ow]"; isStompRisk = false       -- observed calling through: safe
+                    else
+                        kindTag = isStompRisk and "  \226\154\160 [ow!]" or " [ow]"   -- \226\154\160 = warning
+                    end
                 end
 
                 local stateText
@@ -979,7 +1010,7 @@ function ModMixerSwitchboardFrame:collectRows()
                     locked = locked, stateText = stateText,
                     consecutive = consecutive, hookers = hookerMods, isWinner = isWinner,
                     orderIdx = orderIdx, reorderable = reorderable, hasCustomOrder = hasCustomOrder,
-                    hookKind = thisKind,
+                    hookKind = thisKind, stompRisk = isStompRisk,
                 }
                 end
             end
@@ -1396,6 +1427,9 @@ function ModMixerSwitchboardFrame:collectPerformanceRows()
     rows[#rows + 1] = { rowType = "perfInfo", category = "Performance", modLabel = "Mod load",
         featureLabel = string.format("%.1f ms/f  of 16.7ms (60fps) budget", p.totalMs),
         stateText = string.format("%.0f%%  \226\128\148  %s", p.budgetPct, sev) }
+    rows[#rows + 1] = { rowType = "perfInfo", category = "Performance", modLabel = "Coverage",
+        featureLabel = string.format("%d of %d mods have measurable script cost", #p.mods, p.installedCount),
+        stateText = "vehicle/map mods cost VRAM, not shown" }
     if not p.probeArmed then
         rows[#rows + 1] = { rowType = "perfInfo", category = "Performance", modLabel = "Hook/spec probe OFF",
             featureLabel = "listener cost only \226\128\148 drop MODMIXER_HOOKPROBE.txt in modSettings/FS25_ModMixer/ + restart for full per-mod/spec cost",
@@ -1406,20 +1440,54 @@ function ModMixerSwitchboardFrame:collectPerformanceRows()
             modLabel = "(no measurable mod cost)", featureLabel = "nothing is over ~0.001 ms/frame this window", stateText = "" }
         return rows
     end
-    basicHeader(rows, "Heaviest mods (ms/frame)")
-    local maxMs, shown = p.mods[1].ms, 0
+    local maxMs = p.mods[1].ms
+    local modList, sysList = {}, {}
     for _, e in ipairs(p.mods) do
-        if shown >= 25 then break end
-        shown = shown + 1
-        local parkable = SB.isHibernatable ~= nil and SB.isHibernatable(e.mod)
-        local parked   = SB.isHibernated   ~= nil and SB.isHibernated(e.mod)
-        local state = parked and "PARKED" or (parkable and "PARK" or "\226\128\148")
-        rows[#rows + 1] = {
-            rowType = "perfMod", category = "Performance",
-            modName = e.mod, modLabel = prettyMod(e.mod),
-            featureLabel = string.format("%.2f ms/f  %s", e.ms, perfBar(e.ms, maxMs)),
-            stateText = state, perfParkable = parkable, perfParked = parked,
-        }
+        if e.isSpec then sysList[#sysList + 1] = e else modList[#modList + 1] = e end
+    end
+    local function emit(list, limit)
+        local shown = 0
+        for _, e in ipairs(list) do
+            if shown >= limit then break end
+            shown = shown + 1
+            local parkable = (not e.isSpec) and SB.isHibernatable ~= nil and SB.isHibernatable(e.mod)
+            local parked   = SB.isHibernated ~= nil and SB.isHibernated(e.mod)
+            local state = e.isSpec and "game system"
+                       or (parked and "PARKED") or (parkable and "PARK") or "\226\128\148"
+            -- Game-system row: build the "who plugs in" summary (the per-mod physics breakdown).
+            local contrib = nil
+            if e.isSpec and SB.specContributors ~= nil then
+                local cc = SB.specContributors(e.mod, p.frames)
+                if cc ~= nil then
+                    local parts = {}
+                    for i, t in ipairs(cc.timed) do
+                        if i > 5 then break end
+                        parts[#parts + 1] = string.format("%s %.2fms", prettyMod(t.mod), t.ms)
+                    end
+                    local also = {}
+                    for i, m in ipairs(cc.untimed) do if i > 6 then break end; also[#also + 1] = prettyMod(m) end
+                    local s = table.concat(parts, ", ")
+                    if #also > 0 then s = s .. (s ~= "" and "   +also: " or "also: ") .. table.concat(also, ", ") end
+                    if #cc.untimed > 6 then s = s .. " +" .. (#cc.untimed - 6) .. " more" end
+                    contrib = (s ~= "") and s or nil
+                end
+            end
+            rows[#rows + 1] = {
+                rowType = "perfMod", category = "Performance",
+                modName = e.mod, modLabel = prettyMod(e.mod),
+                featureLabel = string.format("%.2f ms/f  %s", e.ms, perfBar(e.ms, maxMs)),
+                stateText = state, perfParkable = parkable, perfParked = parked, perfIsSpec = e.isSpec,
+                perfContributors = contrib,
+            }
+        end
+    end
+    if #modList > 0 then
+        basicHeader(rows, "Your mods (ms/frame)")
+        emit(modList, 20)
+    end
+    if #sysList > 0 then
+        basicHeader(rows, "Game systems \226\128\148 shared specs (base + mods that modify them)")
+        emit(sysList, 15)
     end
     return rows
 end
