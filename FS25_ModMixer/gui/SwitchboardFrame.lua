@@ -72,7 +72,17 @@ function RowSource:populateCellForItemInSection(list, section, index, cell)
     local fillEl   = cell:getAttribute("valueScaleFill")
     local sliderEl = cell:getAttribute("valueSlider")
 
-    if modEl  ~= nil then modEl:setText(row.modLabel) end
+    if modEl  ~= nil then
+        modEl:setText(row.modLabel)
+        -- Section-header rows pop in bold theme-green; cells recycle, so reset the others.
+        if row.rowType == "header" then
+            pcall(function() modEl:setTextBold(true) end)
+            pcall(function() modEl:setTextColor(0.553, 0.780, 0.247, 1) end)
+        else
+            pcall(function() modEl:setTextBold(false) end)
+            pcall(function() modEl:setTextColor(0.86, 0.88, 0.92, 1) end)
+        end
+    end
     if featEl ~= nil then featEl:setText(row.featureLabel) end
 
     -- Value rows: smooth green fill bar + compact MTO slider. All others: state text.
@@ -254,6 +264,77 @@ local TARGET_DESC = {
     ["FSBaseMission.onMinuteChanged"]   = "Fires every in-game minute — schedulers hook it.",
     ["FSBaseMission.onHourChanged"]     = "Fires every in-game hour.",
     ["FSBaseMission.onDayChanged"]      = "Fires every in-game day.",
+
+    -- ── Game loop / load / multiplayer ──────────────────────────────────────────
+    ["FSBaseMission.update"]                      = "The main game loop, run every frame — mods that need a per-frame tick attach here. Lots of mods share it; that's normal, not a fight.",
+    ["FSBaseMission.sendInitialClientState"]      = "Sends a joining multiplayer player the world's starting state — mods append their own data so clients load it too.",
+    ["FSBaseMission.onConnectionFinishedLoading"] = "Runs once a player has finished loading in — mods do their post-load setup here.",
+    ["Mission00.onStartMission"]                  = "Fires when the savegame has loaded and play begins — mods run their one-time startup here.",
+    ["SavegameController.onSaveComplete"]         = "Runs right after a save finishes — mods flush their own data to disk here.",
+    ["ItemSystem.save"]                           = "Writes every placed item to the savegame — mods that add storable/placeable items extend it. Load-critical.",
+
+    -- ── Menus & shop screens ────────────────────────────────────────────────────
+    ["InGameMenuProductionFrame.updateMenuButtons"] = "Builds the button bar on the Productions menu page — mods that add production actions hook it.",
+    ["InGameMenuSettingsFrame.updateGameSettings"]  = "Fills the in-game Settings page — mods that add their own setting rows hook it.",
+    ["InGameMenuSettingsFrame.updateGeneralSettings"] = "Fills the General half of the Settings page — mods adding options hook it.",
+    ["ShopConfigScreen.processAttributeData"]     = "Reads a vehicle's configurable attributes in the shop — config / spec mods adjust what's offered.",
+    ["ShopConfigScreen.setStoreItem"]             = "Loads an item into the shop's configuration screen — config mods hook the setup.",
+    ["ShopItemsFrame.populateCellForItemInSection"] = "Fills each row in the shop's item list — store-tidy / pricing mods restyle or re-sort it.",
+    ["WorkshopScreen.onClose"]                    = "Cleanup when you leave the workshop screen.",
+    ["GameInfoDisplay.draw"]                      = "Draws the top-of-screen info bar (time, money, temperature). HUD mods overlay it — but it loads late, so ModMixer can flag an overlap here, not mute it.",
+
+    -- ── Construction / build screen ─────────────────────────────────────────────
+    ["ConstructionScreen.draw"]                   = "Draws the build / construction screen each frame — placement mods overlay their own UI here.",
+    ["ConstructionScreen.onClose"]                = "Cleanup when you leave the construction screen.",
+    ["ConstructionScreen.onShowConfigs"]          = "Opens a placeable's configuration list in the build screen.",
+    ["ConstructionScreen.rebuildData"]            = "Rebuilds the construction screen's item list — mods that add buildables refresh it here.",
+    ["ConstructionScreen.registerMenuActionEvents"] = "Registers the build screen's key / button actions — mods add their own hotkeys here.",
+    ["Landscaping.isModificationAreaOnOwnedLand"] = "Checks a terraform area sits on land you own — build-anywhere mods relax it.",
+
+    -- ── Farm save/load (load-critical — a bad hook can wipe money/vehicles) ──────
+    ["Farm.new"]                                  = "Creates a farm object as the save loads — touching it is load-critical; a bad hook can start you with no money or vehicles.",
+    ["Farm.loadFromXMLFile"]                      = "Restores a farm (money, land, stats) from the savegame.",
+    ["Farm.saveToXMLFile"]                        = "Writes a farm (money, land, stats) to the savegame.",
+
+    -- ── Bunker silo state (mostly per-silo save/sync, not a real fight) ──────────
+    ["BunkerSilo.load"]                           = "Sets up a bunker silo when the map loads.",
+    ["BunkerSilo.loadFromXMLFile"]                = "Restores a bunker silo's contents from the savegame.",
+    ["BunkerSilo.saveToXMLFile"]                  = "Writes a bunker silo's contents to the savegame.",
+    ["BunkerSilo.registerSavegameXMLPaths"]       = "Declares the savegame fields a bunker silo reads and writes.",
+    ["BunkerSilo.readStream"]                     = "Receives a bunker silo's state on a multiplayer client.",
+    ["BunkerSilo.writeStream"]                    = "Sends a bunker silo's state to multiplayer clients.",
+
+    -- ── Map-load managers (register types at startup; per-type, not a fight) ─────
+    ["FillTypeManager.loadMapData"]               = "Loads the list of fill types (crops, liquids, goods) at map start — mods that add fill types register here.",
+    ["FruitTypeManager.loadMapData"]              = "Loads the crop / fruit types at map start — mods that add crops register here.",
+    ["DensityMapHeightManager.loadMapData"]       = "Loads terrain-height paint data at map start — heap / tip-on-ground mods register here.",
+    ["MotionPathEffectManager.loadMapData"]       = "Loads particle and effect definitions at map start.",
+    ["AIJobTypeManager.loadMapData"]              = "Loads the AI worker job types at map start — helper / automation mods add jobs here.",
+
+    -- ── Field work & tools ──────────────────────────────────────────────────────
+    ["Motorized.onUpdate"]                        = "Per-frame engine update — engine, sound and consumption mods piggyback here.",
+    ["Vehicle.load"]                              = "Builds a vehicle as it spawns — many specialisations add their setup here.",
+    ["Weather.update"]                            = "Advances the weather simulation each tick — weather overhauls drive it.",
+    ["Baler.processBalerArea"]                    = "Bale formation over the worked area — baling realism mods adjust it.",
+    ["Tedder.processDropArea"]                    = "Tedder spreading / drying over the worked area.",
+    ["HandToolChainsaw.updateRingSelector"]       = "The chainsaw's cut-ring placement each frame — felling / forestry mods tweak it.",
+    ["AICollisionTriggerHandler.onVehicleCollisionDistanceCallback"] = "An AI helper's obstacle check while driving — AI-driving mods adjust how it reacts.",
+    ["HandToolHands.consoleCommandToggleSuperStrength"] = "A debug console command for carrying heavy items — strength / lifting mods add their own.",
+
+    -- ── Production & economy ────────────────────────────────────────────────────
+    ["PlaceableProductionPoint.onFinalizePlacement"] = "Finishes placing a production building — production mods finalise their setup.",
+    ["ProductionPoint.load"]                      = "Sets up a production building's recipes and storage on load.",
+
+    -- ── HUD overlays ────────────────────────────────────────────────────────────
+    ["PlayerHUDUpdater.showFieldInfo"]            = "The field-info box (size, crop, moisture) shown when you stand on a field — field / weather HUD mods add lines.",
+    ["PlayerHUDUpdater.showSplitShapeInfo"]       = "The cut-wood info box (volume, quality, value) for forestry — forestry mods extend it.",
+    ["InfoDialog.show"]                           = "Shows a pop-up info dialog — mods reuse it for their own messages.",
+
+    -- ── Wheel physics (single-mod tail) ─────────────────────────────────────────
+    ["WheelPhysics.finalize"]                     = "Finishes wheel setup after a vehicle loads.",
+    ["WheelPhysics.updateContact"]                = "Per-tick tyre-to-ground contact — grip / sink mods adjust it.",
+    ["WheelPhysics.updatePhysics"]                = "A per-tick wheel physics step.",
+    ["WheelsUtil.getSmoothedAcceleratorAndBrakePedals"] = "Smooths raw pedal input before it drives the engine.",
 }
 
 local CAT_ORDER = {
@@ -299,7 +380,7 @@ local function targetHelp(target)
     local name = (type(info) == "table" and info.name) or target
     local desc = TARGET_DESC[target]
         or (type(info) == "table" and info.desc)
-        or "An engine function several mods hook."
+        or "A game function more than one mod hooks into — the name above points to the area it affects."
     return name .. " \226\128\148 " .. desc .. "\n[" .. tostring(target) .. "]"
 end
 
@@ -384,11 +465,13 @@ end
 
 -- Bottom-legend text per tier.
 local TIER_LEGEND = {
-    seating  = "SIMPLE \226\128\148 rank your mods; a higher seat wins its conflicts everywhere. Switch View top-left.",
-    category = "BY CATEGORY \226\128\148 settle one realm at a time. Change winner picks a fight; Promote/Move ranks within the realm; shared stacks all run.",
-    advanced = "ADVANCED \226\128\148 #/# = firing position; [ow] wraps inner (safe); \226\154\160 [ow!] = positioned to override the mods below it (potential stomp). Move reorders, Make-Winner mutes \226\128\148 both restart.",
-    review   = "REVIEW \226\128\148 things worth a look: duplicate-purpose mods, incompatible pairs, HUD overlaps. Select a row for the evidence; Dismiss (Space) hides ones you've judged.",
-    performance = "PERFORMANCE \226\128\148 live per-mod cost (ms/frame) vs your 60fps budget. Click MOD or FEATURE to sort. Park (Space) gates a mod's per-frame work to reclaim it. Window resets when you open the tab.",
+    seating  = "SIMPLE \226\128\148 start here; it's all most setups ever need. Rank your mods \226\128\148 a higher one wins its conflicts everywhere.",
+    live     = "LIVE \226\128\148 instant settings your mods expose (toggles & sliders). Change them right here \226\128\148 it applies in-game immediately. \"SetByMod\" = the mod's own default.",
+    category = "BY CATEGORY \226\128\148 optional fine-tuning, one area at a time (wheels, HUD, economy\226\128\166). Simple already covers most cases.",
+    advanced = "ADVANCED \226\128\148 power-user control, per conflict. #/# = stack position (1 = top = runs first); [ow] = wraps the inner ones (safe); \226\154\160 [ow!] = sits on top, overrides the mods below it (potential stomp). Move reorders, Make-Winner mutes \226\128\148 both need a restart.",
+    review   = "REVIEW \226\128\148 worth a look: lookalike mods, known clashes, HUD overlaps. Pick a row for the evidence; Space dismisses ones you've judged.",
+    performance = "PERFORMANCE \226\128\148 live per-mod cost (ms/frame) vs your 60fps budget. Click MOD or FEATURE to sort; Park (Space) reclaims a mod's per-frame work.",
+    vehicle  = "VEHICLE \226\128\148 live read-out of the machine you're in (damage, wear, engine, speed, mass, per-wheel grip). Watch it update as you drive \226\128\148 handy for spotting a mod-vs-mod state fight.",
 }
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -428,8 +511,8 @@ function ModMixerSwitchboardFrame:onGuiSetupFinished()
     -- and its background bitmap in its imageSelectedColor (green) when the "background" child's
     -- getIsSelected() is true — so we override BOTH. Reads the LIVE mode, so the highlight stays
     -- correct with no per-switch bookkeeping.
-    local tabs  = { self.tab1, self.tab2, self.tab3, self.tab4, self.tab5 }
-    local modes = { "seating", "category", "advanced", "review", "performance" }
+    local tabs  = { self.tab1, self.tab2, self.tab3, self.tab4, self.tab5, self.tab6, self.tab7 }
+    local modes = { "seating", "live", "category", "advanced", "review", "performance", "vehicle" }
     for i, btn in ipairs(tabs) do
         if btn ~= nil then
             local m = modes[i]
@@ -480,6 +563,10 @@ function ModMixerSwitchboardFrame:updateChrome()
     setVis(self.sortModDesc,  perf and ps.key == "name" and ps.dir == "desc")
     setVis(self.sortFeatAsc,  perf and ps.key == "cost" and ps.dir == "asc")
     setVis(self.sortFeatDesc, perf and ps.key == "cost" and ps.dir == "desc")
+    -- MOD/FEATURE only sort in Performance; grey them out (disabled) elsewhere so they don't
+    -- invite a click that does nothing.
+    pcall(function() if self.colMod  ~= nil then self.colMod:setDisabled(not perf)  end end)
+    pcall(function() if self.colFeat ~= nil then self.colFeat:setDisabled(not perf) end end)
 end
 
 -- VIEW switch clicked (Simple / By category / Advanced) — set the tier and rebuild.
@@ -519,10 +606,12 @@ function ModMixerSwitchboardFrame:switchTier(mode)
     self:setMenuButtonInfoDirty()
 end
 function ModMixerSwitchboardFrame:onTab1() self:switchTier("seating")     end
-function ModMixerSwitchboardFrame:onTab2() self:switchTier("category")    end
-function ModMixerSwitchboardFrame:onTab3() self:switchTier("advanced")    end
-function ModMixerSwitchboardFrame:onTab4() self:switchTier("review")      end
-function ModMixerSwitchboardFrame:onTab5() self:switchTier("performance") end
+function ModMixerSwitchboardFrame:onTab2() self:switchTier("live")        end
+function ModMixerSwitchboardFrame:onTab3() self:switchTier("category")    end
+function ModMixerSwitchboardFrame:onTab4() self:switchTier("advanced")    end
+function ModMixerSwitchboardFrame:onTab5() self:switchTier("review")      end
+function ModMixerSwitchboardFrame:onTab6() self:switchTier("performance") end
+function ModMixerSwitchboardFrame:onTab7() self:switchTier("vehicle")     end
 
 -- Sortable Performance headers (TSSC-style): MOD = by name, FEATURE = by cost. Only acts in
 -- the Performance tier (the headers are shared across tiers); repeat clicks flip direction.
@@ -1037,14 +1126,18 @@ function ModMixerSwitchboardFrame:collectRows()
                     kindTag = isStompRisk and "  \226\154\160 [ow!]" or " [ow]"   -- \226\154\160 = warning sign
                 end
 
+                -- TOP-KING display: the outermost (king / [ow!]) sits at the TOP of its stack,
+                -- so number from the top -- king reads 1/N, innermost reads N/N. (orderIdx itself
+                -- stays firing-order = install seq; we only flip what's shown.)
+                local dispIdx = (nHook or 1) - (orderIdx or 1) + 1
                 local stateText
                 if locked     then stateText = "load-critical"
                 elseif vetoed then stateText = "VETOED (restart)"
                 elseif isWinner then stateText = "WINNER (restart)"
                 elseif hasCustomOrder and consecutive then
-                    stateText = string.format("reordered %d/%d%s", orderIdx or 0, nHook, kindTag)
+                    stateText = string.format("reordered %d/%d%s", dispIdx, nHook, kindTag)
                 elseif consecutive then
-                    stateText = string.format("%d/%d%s", orderIdx or 0, nHook, kindTag)
+                    stateText = string.format("%d/%d%s", dispIdx, nHook, kindTag)
                 else
                     stateText = "active"
                 end
@@ -1076,10 +1169,9 @@ function ModMixerSwitchboardFrame:collectRows()
         end
     end
 
-    -- #3: live read-only state of the player's current vehicle. (Disabled — see flag.)
-    if SHOW_VEHICLE_STATE then
-        for _, r in ipairs(vehicleStateRows()) do data[#data + 1] = r end
-    end
+    -- Live vehicle state used to ride along in Advanced under a "Current Vehicle" category;
+    -- it now has its OWN tab (buildRows "vehicle" branch → vehicleStateRows), so it's no longer
+    -- appended here. SHOW_VEHICLE_STATE still gates the tab's live tick.
 
     return data
 end
@@ -1291,8 +1383,8 @@ function ModMixerSwitchboardFrame:rebuildFilterCats()
     -- Basic mode pages by the same switcher, over its own categories (King Pins +
     -- fight categories + Incompatible).
     local sbMode = ModMixerSwitchboard ~= nil and ModMixerSwitchboard.mode or "advanced"
-    -- Tier 1 (Seating), Tier 4 (Review) & Tier 5 (Performance): single page, no pager.
-    if sbMode == "seating" or sbMode == "review" or sbMode == "performance" then
+    -- Single-page tiers (no category pager): Seating, Review, Performance, Live, Vehicle.
+    if sbMode == "seating" or sbMode == "review" or sbMode == "performance" or sbMode == "live" or sbMode == "vehicle" then
         self.filterCats = {}
         if self.categoryFilter ~= nil then pcall(function() self.categoryFilter:setVisible(false) end) end
         return
@@ -1327,7 +1419,9 @@ function ModMixerSwitchboardFrame:rebuildFilterCats()
     end
     local data = self:collectRows()
     local present = {}
-    for _, r in ipairs(data) do present[r.category] = true end
+    for _, r in ipairs(data) do
+        if r.category ~= "Live Mod Features" then present[r.category] = true end   -- Live = its own tier
+    end
     local cats = {}
     for c in pairs(present) do cats[#cats + 1] = c end
     table.sort(cats, function(a, b)
@@ -1576,6 +1670,35 @@ function ModMixerSwitchboardFrame:buildRows()
     if sbMode == "review" then return self:collectReviewRows() end
     if sbMode == "performance" then return self:collectPerformanceRows() end
 
+    -- Tier 6 (Live): the instant mod toggles/sliders, now their own tier. These rows are the
+    -- "Live Mod Features" category that collectRows() already builds; we just isolate them here
+    -- (and Advanced excludes them below). Grouped by MOD, then feature.
+    if sbMode == "live" then
+        local data = self:collectRows()
+        local feats = {}
+        for _, r in ipairs(data) do
+            if r.category == "Live Mod Features" then feats[#feats + 1] = r end
+        end
+        table.sort(feats, function(a, b)
+            if (a.modLabel or "") ~= (b.modLabel or "") then return (a.modLabel or "") < (b.modLabel or "") end
+            return (a.featureLabel or "") < (b.featureLabel or "")
+        end)
+        local rows = {}
+        basicHeader(rows, "Live mod features")
+        for _, r in ipairs(feats) do rows[#rows + 1] = r end
+        return rows
+    end
+
+    -- Tier 7 (Vehicle): live read-only state of the machine you're sitting in. Its own tab now
+    -- (was a "Current Vehicle" category in Advanced). vehicleStateRows() rebuilds each refresh;
+    -- the live tick re-reads it ~2×/sec while this tab is open.
+    if sbMode == "vehicle" then
+        local rows = {}
+        basicHeader(rows, "Current vehicle")
+        for _, r in ipairs(vehicleStateRows()) do rows[#rows + 1] = r end
+        return rows
+    end
+
     -- Tiers 1 & 2 (Seating / Category) share the same sort + header machinery; they only
     -- differ in which collector feeds them and whether the category pager filters.
     if sbMode == "seating" or sbMode == "category" then
@@ -1603,6 +1726,14 @@ function ModMixerSwitchboardFrame:buildRows()
     end
 
     local data = self:collectRows()
+    -- Live Mod Features now live in their own "Live" tier; Advanced shows conflicts only.
+    do
+        local conflicts = {}
+        for _, r in ipairs(data) do
+            if r.category ~= "Live Mod Features" then conflicts[#conflicts + 1] = r end
+        end
+        data = conflicts
+    end
 
     -- Apply the category filter ("All" = no filter).
     if self.activeCategory ~= nil and self.activeCategory ~= "All" then
@@ -1632,7 +1763,7 @@ function ModMixerSwitchboardFrame:buildRows()
         if a.featureLabel ~= b.featureLabel then return a.featureLabel < b.featureLabel end
         -- Within one target's chain, sort by firing order so the chain reads top→bottom.
         local ai, bi = a.orderIdx or 0, b.orderIdx or 0
-        if ai ~= bi then return ai < bi end
+        if ai ~= bi then return ai > bi end   -- TOP-KING: outermost (decides = [ow!]) on top, overriding those below
         return (a.modLabel or "") < (b.modLabel or "")
     end)
 
@@ -1743,9 +1874,8 @@ function ModMixerSwitchboardFrame:update(dt)
         return
     end
     if not SHOW_VEHICLE_STATE then return end
-    -- The vehicle panel only exists in Advanced; don't live-refresh in the other tiers.
-    if ModMixerSwitchboard ~= nil and ModMixerSwitchboard.mode ~= "advanced" then return end
-    if self.activeCategory ~= "Current Vehicle" then return end
+    -- The vehicle panel is its own tab now; only live-refresh while it's the active view.
+    if ModMixerSwitchboard ~= nil and ModMixerSwitchboard.mode ~= "vehicle" then return end
     local now = g_time or 0
     if self._lastLive == nil or (now - self._lastLive) >= 500 then
         self._lastLive = now

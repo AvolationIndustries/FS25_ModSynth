@@ -630,7 +630,8 @@ local function doLoad()
     -- migrate the older two-mode value ("basic" → "seating")
     if loadedMode == "basic" then loadedMode = "seating" end
     if loadedMode == "seating" or loadedMode == "category" or loadedMode == "advanced"
-       or loadedMode == "review" or loadedMode == "performance" then
+       or loadedMode == "review" or loadedMode == "performance" or loadedMode == "live"
+       or loadedMode == "vehicle" then
         SB.mode = loadedMode
     end
     SB.priorityGlobal = loadedPriority
@@ -1454,11 +1455,12 @@ end
 -- TIERED RESOLUTION API  (Seating / Category / Advanced)
 -- ─────────────────────────────────────────────────────────────────────────────
 
-local MODE_CYCLE = { seating = "category", category = "advanced", advanced = "review",
-                    review = "performance", performance = "seating" }
+local MODE_CYCLE = { seating = "live", live = "category", category = "advanced",
+                    advanced = "review", review = "performance", performance = "vehicle",
+                    vehicle = "seating" }
 function SB.setMode(m)
     if m ~= "seating" and m ~= "category" and m ~= "advanced" and m ~= "review"
-       and m ~= "performance" then m = "seating" end
+       and m ~= "performance" and m ~= "live" and m ~= "vehicle" then m = "seating" end
     SB.mode = m
     SB.save()
 end
@@ -1626,11 +1628,22 @@ end
 
 function SB.buildReviewItems()
     local items = {}
+    -- Currently-installed mod set (normalised) so the OFFLINE detectors can't flag mods you've
+    -- since removed (e.g. a CropRotationPro pair lingering in the redundancy data).
+    local installedNorm = {}
+    if type(g_modManager) == "table" and type(g_modManager.mods) == "table" then
+        for _, m in ipairs(g_modManager.mods) do
+            if type(m) == "table" and m.modName ~= nil then installedNorm[_normMod(m.modName)] = true end
+        end
+    end
+    local function bothInstalled(a, b)
+        return installedNorm[_normMod(tostring(a))] == true and installedNorm[_normMod(tostring(b))] == true
+    end
     -- 1) Redundancy candidates (offline detector: name/hook signals + modDesc descriptions)
     local red = safeGlobal("ModMixerRedundancy")
     if type(red) == "table" then
         for _, p in ipairs(red) do
-            if type(p) == "table" and p.a ~= nil and p.b ~= nil then
+            if type(p) == "table" and p.a ~= nil and p.b ~= nil and bothInstalled(p.a, p.b) then
                 local key = "red|" .. tostring(p.a) .. "|" .. tostring(p.b)
                 items[#items + 1] = {
                     rkind = "redundancy", key = key, dismissed = SB.reviewDismissed[key] == true,

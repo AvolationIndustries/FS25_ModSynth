@@ -45,11 +45,13 @@
         <textColor value="$preset_colorWhite_50" />
         <textHighlightedColor value="$preset_fs25_colorMainHighlight" />
         <textFocusedColor value="$preset_fs25_colorMainHighlight" />
+        <textDisabledColor value="$preset_colorDisabled" />
     </Profile>
 
     <Profile name="ModMixer_headerInfo" extends="fs25_statisticsHeaderText" with="anchorTopLeft">
         <textMaxNumLines value="2"/>
         <textVerticalAlignment value="top"/>
+        <textAlignment value="left"/>
     </Profile>
 
     <!-- Feature help box (top-right): plain-English explanation of the selected row.
@@ -57,7 +59,8 @@
     <Profile name="ModMixer_helpBox" extends="fs25_statisticsHeaderText" with="anchorTopLeft">
         <textMaxNumLines value="8"/>
         <textVerticalAlignment value="top"/>
-        <textSize value="13px"/>
+        <textSize value="15px"/>
+        <textAlignment value="left"/>
         <textColor value="$preset_fs25_colorMainLight"/>
     </Profile>
 
@@ -88,6 +91,6 @@
          fs25_subCategorySelectorTabbedTabBg "background" bitmap (SwitchboardFrame.xml), driven
          by a getIsSelected override on that child in onGuiSetupFinished. -->
     <Profile name="ModMixer_tab" extends="fs25_subCategorySelectorTabbedTab" with="anchorTopLeft">
-        <textSize value="18px" />
+        <textSize value="14px" />
     </Profile>
 </GUIProfiles>
