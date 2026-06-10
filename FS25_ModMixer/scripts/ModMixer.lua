@@ -878,51 +878,86 @@ end
 -- ─────────────────────────────────────────────────────────────────────────────
 -- IN-GAME ON-SCREEN WARNING (incompatible mods only)
 --
--- v1.3: native SIDE NOTIFICATIONS — the stacked feed under the clock, the same
--- channel the game's own policy/contract notices use. We previously rendered our
--- own red text at the top-left, but that corner belongs to the F1 help overlay
--- (which is WHY no mod draws there): with help open the two layers overprinted
--- into mush. The feed stacks with everything, fades itself, and can't overlap.
--- One notice per incompatible group + a pointer to Switchboard > Review, where
--- the pairs are listed permanently with evidence (plus ModMixer.log).
+-- Third placement, and the lesson behind it: a must-not-miss boot warning can't
+-- live in a channel we don't control.
+--   v1.2 self-drawn TOP-LEFT → collided with the F1 help overlay (that corner is
+--                              the help box's; with F1 up the two layers were mush).
+--   v1.3 native SIDE-FEED     → clean, but spammy mods (electrical/breakdown
+--                              "Insufficient voltage" notices) flood the feed and
+--                              EVICT our line within seconds — never seen.
+--   now: self-drawn TOP-CENTRE, just under the HUD compass — the last clear band
+--   (corners are taken: TL=F1 help, TR=notif feed + clock/weather, BR=moisture/
+--   vehicle HUD, BL=minimap). We draw it OURSELVES so we own the dwell + fade;
+--   nothing can evict it. Anchored to a FIXED screen coord (centre, ~12% down),
+--   NOT to the compass widget — so it lands in the same band with or without the
+--   compass HUD. The permanent, scrollable home for the list is Switchboard >
+--   Review (+ ModMixer.log); this on-screen line is just the "look over there".
 --
--- Timing: deferred until the player is actually in-world (no GUI / loading
--- screen up), then fired ONCE — no per-frame draw hook anymore.
+-- Timing: deferred until in-world (no GUI), holds HOLD_MS, fades over FADE_MS.
+-- IMPORTANT: renderText alignment/bold/colour are GLOBAL render state — reset
+-- them after drawing or we corrupt the game's / other mods' text (we set CENTER).
 -- ─────────────────────────────────────────────────────────────────────────────
 
 if #incompatibleWarnings > 0 then
-    local START_DELAY = 2500     -- ms in-world before firing
-    local SHOW_MS     = 15000    -- how long each notice stays in the feed
-    local RED         = { 0.95, 0.12, 0.12, 1 }
+    local warnLines = { "ModMixer: incompatible mods detected" }
+    for _, w in ipairs(incompatibleWarnings) do
+        table.insert(warnLines, w.mods .. "  (keep one)")
+    end
+    table.insert(warnLines, "Open Switchboard > Review for the full list")
 
-    local inWorld, fired = 0, false
+    local START_DELAY = 2500     -- ms in-world before showing
+    local HOLD_MS     = 20000    -- ms fully visible
+    local FADE_MS     = 2500     -- ms fade-out
+    local CX          = 0.5      -- screen centre X (normalized)
+    local Y_TOP       = 0.88     -- just under the HUD compass strip
+    local LINE_H      = 0.030
+    local SIZE        = 0.021
+    local TITLE_SIZE  = 0.024
+
+    local inWorld = 0
+    local shownAt = nil          -- accumulated ms since display started
     FSBaseMission.update = Utils.appendedFunction(FSBaseMission.update,
         function(self, dt)
-            if fired then return end
             if g_gui ~= nil and g_gui.currentGui ~= nil then return end
             inWorld = inWorld + dt
             if inWorld < START_DELAY then return end
-            fired = true
-            local hud = (g_currentMission ~= nil) and g_currentMission.hud or nil
-            if hud ~= nil and hud.addSideNotification ~= nil then
-                for _, w in ipairs(incompatibleWarnings) do
-                    pcall(function()
-                        hud:addSideNotification(RED,
-                            "ModMixer: incompatible - " .. w.mods .. " (keep one)", SHOW_MS)
-                    end)
-                end
-                pcall(function()
-                    hud:addSideNotification(RED,
-                        "ModMixer: details in Switchboard > Review (or ModMixer.log)", SHOW_MS)
-                end)
-            else
-                -- Feed unavailable (API moved?) — last-ditch single banner; the full
-                -- list is always in Switchboard > Review and ModMixer.log anyway.
-                pcall(function()
-                    g_currentMission:showBlinkingWarning(
-                        "ModMixer: incompatible mods installed - see Switchboard > Review", 8000)
-                end)
+            if shownAt == nil then shownAt = 0 end
+            shownAt = shownAt + dt
+        end)
+
+    FSBaseMission.draw = Utils.appendedFunction(FSBaseMission.draw,
+        function(self)
+            -- Never paint over an open menu/GUI (Switchboard, ESC menu, dialogs).
+            if g_gui ~= nil and g_gui.currentGui ~= nil then return end
+            if shownAt == nil then return end
+            if shownAt > (HOLD_MS + FADE_MS) then return end
+
+            local alpha = 1.0
+            if shownAt > HOLD_MS then
+                alpha = 1.0 - ((shownAt - HOLD_MS) / FADE_MS)
             end
+            if alpha <= 0 then return end
+
+            setTextAlignment(RenderText.ALIGN_CENTER)
+            setTextBold(true)
+            local y = Y_TOP
+            for i, line in ipairs(warnLines) do
+                local sz   = (i == 1) and TITLE_SIZE or SIZE
+                local last = (i == #warnLines)
+                -- drop shadow for legibility against bright sky/snow
+                setTextColor(0, 0, 0, alpha)
+                renderText(CX + 0.0012, y - 0.0016, sz, line)
+                -- title = bright red; group lines = lighter red; footer = light grey (the action)
+                if i == 1 then       setTextColor(1.0, 0.13, 0.13, alpha)
+                elseif last then     setTextColor(0.92, 0.92, 0.92, alpha)
+                else                 setTextColor(1.0, 0.34, 0.30, alpha) end
+                renderText(CX, y, sz, line)
+                y = y - ((i == 1) and (LINE_H + 0.004) or LINE_H)
+            end
+            -- reset shared render state (alignment especially) so we don't leak it
+            setTextAlignment(RenderText.ALIGN_LEFT)
+            setTextBold(false)
+            setTextColor(1, 1, 1, 1)
         end)
 end
 
