@@ -79,9 +79,7 @@ ModMixer loads and reports per client. The Switchboard's levers (reorder, mute, 
 ## Links & support
 
 - **GitHub:** https://github.com/AvolationIndustries/FS25_ModMixer
-- **Discord:** https://discord.gg/jwgd9yU32N
-
-Found a conflict ModMixer got wrong, or a pair it should know about? Open an issue or drop it in the Discord.
+Found a conflict ModMixer got wrong, or a pair it should know about? Open an issue on GitHub.
 
 ---
 

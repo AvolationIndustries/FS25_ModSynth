@@ -1,6 +1,9 @@
 # Temp / test artifacts
 _m*
 _icon_*
+_case_*
+_glyph_*
+_verify_*
 *.log
 _scan_results.json
 
