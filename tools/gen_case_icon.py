@@ -15,11 +15,11 @@ HERE = os.path.dirname(os.path.abspath(__file__)); PROJECT = os.path.dirname(HER
 SRC = os.path.join(PROJECT, "FS25_ModMixer"); GUI = os.path.join(SRC, "gui")
 SS = 4
 
-DARK=(42,49,59,255); EDGE=(71,81,96,255); RECESS=(30,35,43,255); PANEL=(22,26,33,255)
-FOOT=(21,24,30,255); LATCH=(20,24,30,255); RIB=(23,27,34,255); BRACK=(20,24,30,255)
+DARK=(48,72,104,255); EDGE=(86,124,160,255); RECESS=(32,52,78,255); PANEL=(12,32,58,255)
+FOOT=(28,52,84,255); LATCH=(26,50,82,255); RIB=(30,54,86,255); BRACK=(26,50,82,255)
 WHITE=(231,236,241,255); BRIGHT=(232,236,240,255); GREY=(154,163,173,255); SIL=(197,202,208,255)
 GREEN=(141,198,63,255); AMBER=(232,180,60,255); BLUE=(79,147,196,255); RED=(226,85,78,255)
-DKHOLE=(20,24,30,255); SCREEN=(14,18,24,255); TOG=(16,20,26,255); HANDLE=(42,49,59,255); CATCH=(74,82,96,255)
+DKHOLE=(20,24,30,255); SCREEN=(14,18,24,255); TOG=(16,20,26,255); HANDLE=(48,72,104,255); CATCH=(72,105,140,255)
 STEEL=(58,67,79,255)
 
 def P(x,y): return (x*SS, y*SS)
@@ -151,5 +151,11 @@ show(False,256).resize((280,280)).save(os.path.join(PROJECT,"_glyph_unselected.p
 show(True,256).resize((280,280)).save(os.path.join(PROJECT,"_glyph_selected.png"))
 show(False,52).resize((176,176),Image.NEAREST).save(os.path.join(PROJECT,"_glyph_u56.png"))
 show(True,52).resize((176,176),Image.NEAREST).save(os.path.join(PROJECT,"_glyph_s56.png"))
-b=Image.new("RGBA",(256,256),(174,180,184,255)); b.alpha_composite(case.resize((256,256),Image.LANCZOS)); b.convert("RGB").resize((300,300)).save(os.path.join(PROJECT,"_case_preview.png"))
+tmpl_path=os.path.join(PROJECT,"art","giants_template.png")
+if os.path.exists(tmpl_path):
+    tmpl=Image.open(tmpl_path).convert("RGBA").resize((512,512),Image.LANCZOS)
+else:
+    tmpl=Image.new("RGBA",(512,512),(30,32,34,255))
+tmpl.alpha_composite(case)
+tmpl.convert("RGB").resize((512,512)).save(os.path.join(PROJECT,"_case_preview.png"))
 print("wrote case 512 + glyph 256 (modules-only) + previews")

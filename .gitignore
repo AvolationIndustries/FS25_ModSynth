@@ -5,6 +5,7 @@ _case_*
 _glyph_*
 _verify_*
 _header_*
+_variant*
 *.log
 _scan_results.json
 
