@@ -88,10 +88,12 @@ def draw_glyph2(d):
     gci(96,50,13,GREEN); gci(46,104,13,WHITE); gci(102,158,13,WHITE)
     gr(30,193,32,55,7,None,WHITE,3); gr(74,193,32,55,7,None,WHITE,3)
     gci(46,207,7,GREY); gci(46,221,10,BRIGHT); gci(90,235,7,GREY); gci(90,221,10,BRIGHT)
-    # right module: rpm gauge + dials
-    ga(191,84,52,152,270,9,STEEL); ga(191,84,52,270,355,9,AMBER); ga(191,84,52,355,388,9,RED)
+    # right module: rpm gauge + dials. The gauge's "steel" sweep and the dial needle
+    # lines were dark-on-dark (invisible idle, dots-only when selected) — WHITE now
+    # so the full gauge ring + needles read in every state; amber/red tip unchanged.
+    ga(191,84,52,152,270,9,WHITE); ga(191,84,52,270,355,9,AMBER); ga(191,84,52,355,388,9,RED)
     gc(191,84,225,58,6,WHITE); gci(191,84,7,WHITE)
-    gci(164,192,19,SIL); gc(164,192,153,180,4,DARK); gci(218,192,19,SIL); gc(218,192,229,180,4,DARK)
+    gci(164,192,19,SIL); gc(164,192,153,180,4,WHITE); gci(218,192,19,SIL); gc(218,192,229,180,4,WHITE)
     gci(180,234,6,AMBER); gci(206,234,6,SIL)
 
 def draw_glyph_mono(d):
