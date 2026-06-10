@@ -1,4 +1,4 @@
-﻿-- ModMixer.lua  v1.2.0.0
+﻿-- ModMixer.lua  v1.3.0.0
 -- Unified single-mod build. Hook patching (ModMixerHooks.lua) loads first via
 -- extraSourceFiles ordering; analysis defers to Mission00.loadMission00Finished.
 --
@@ -14,7 +14,7 @@
 --   4. In-game dialog: incompatible mod groups trigger a dialog at map load
 --      so players see the warning without digging through any log file.
 
-local MS_VERSION = "1.2.0.0"
+local MS_VERSION = "1.3.0.0"
 local MOD_NAME   = g_currentModName
 
 -- ─────────────────────────────────────────────────────────────────────────────

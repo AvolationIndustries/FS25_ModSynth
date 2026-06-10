@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="105">
     <author>Avolation Industries</author>
-    <version>1.2.0.0</version>
+    <version>1.3.0.0</version>
     <title>
         <en>ModMixer</en>
         <de>ModMixer</de>
@@ -9,65 +9,101 @@
     </title>
     <description>
         <en><![CDATA[
-Mods silently break each other. When two mods change the same game function, the one that loads last usually wins — and the other mod's work just vanishes, with no error, no crash, and no explanation. ModMixer finds these conflicts and tells you, in plain English, exactly what is fighting what and whether it actually matters.
+Mods silently break each other. When two mods change the same game function, the one that loads last usually wins — the other mod's work just vanishes: no error, no crash, no explanation. ModMixer finds these conflicts, explains them in plain English, and gives you a control panel to settle them.
 
-WHAT IT DOES
-- Scans every Lua hook across your whole mod stack at startup and writes a clear, severity-rated conflict report to ModMixer.log (saved next to your game log).
-- Flags the conflicts that matter — broken overwrites that throw away another mod's work, load-order traps, and incompatible mods that replace the same system — and stays quiet about the harmless ones.
-- Warns you on screen when two genuinely incompatible mods are installed, so you know to remove one.
-- Where a fix is safe and provably correct, it repairs the hook chain automatically at runtime and silences known third-party log spam. Everything else is logged with a plain-English explanation so you decide.
+THE SWITCHBOARD
+A full control panel in the in-game menu (look for the ModMixer icon), seven tabs:
+- SIMPLE — rank your mods; a higher mod wins its conflicts everywhere. All most setups ever need.
+- LIVE — instant settings your mods expose (toggles and sliders), applied in-game immediately.
+- CATEGORY — the same ranking, one area at a time: wheels, HUD, economy, weather...
+- ADVANCED — every contested function with its full hook chain: who runs first, who overrides whom. Reorder the chain or mute a stomp, per conflict.
+- REVIEW — worth a look: likely duplicate mods, known incompatible pairs, HUD overlaps — each with evidence. Dismiss what you've judged.
+- PERFORMANCE — live per-mod cost (ms per frame) against your fps budget. Find the mod eating your frame rate and park it without uninstalling.
+- VEHICLE — live diagnostics of the machine you're sitting in: damage, wear, temperature, speed, mass, per-wheel grip.
 
-No configuration. No gameplay changes. Zero runtime cost after map load. Safe for multiplayer.
+Every row comes with a plain-English explanation. You still get the classic boot conflict report (ModMixer.log, next to your game log) and an on-screen warning when two flatly incompatible mods are installed.
 
-NEW IN 1.2
-ModMixer is now a single mod — no companion preloader required. The hook instrumentation and conflict analysis are fully integrated.
+BUILT SAFE
+- Structural changes (reorder, mute) apply on restart — nothing is rewired mid-game.
+- Load-critical functions are locked and can never be vetoed.
+- If a launch doesn't complete, the next one starts in safe mode automatically (all levers off) — your game always loads.
+- Manual kill switch: create an empty file MODMIXER_SAFE_MODE.txt in modSettings/FS25_ModMixer/.
 
-NEW IN 1.1
-ModMixer ships a built-in conflict database generated from a scan of hundreds of script mods. On top of its hand-verified catalogue, it detects conflicts generically — including brand-new mod combinations nobody has documented yet — and flags anything it does not recognise as "uncatalogued", so nothing slips through silently. The hand-verified catalogue covers 57 entries.
+IMPORTANT: keep the zip named FS25_0_ModMixer.zip — the 0 makes it load before your other mods, which is how it sees every hook they install.
+
+Multiplayer: loads and reports per client; the Switchboard's levers are designed for singleplayer.
+
+NEW IN 1.3
+The Switchboard — the seven-tab control panel above — plus the performance profiler, the review hub, vehicle diagnostics, and the boot-recovery safety net.
 
 GitHub:  https://github.com/AvolationIndustries/FS25_ModMixer
+Discord: https://discord.gg/jwgd9yU32N
 
 By Avolation Industries.
         ]]></en>
         <de><![CDATA[
-Mods machen sich gegenseitig stillschweigend kaputt. Wenn zwei Mods dieselbe Spielfunktion verändern, gewinnt meist der zuletzt geladene – und die Arbeit des anderen Mods verschwindet einfach: ohne Fehlermeldung, ohne Absturz, ohne Erklärung. ModMixer findet diese Konflikte und sagt dir in klaren Worten, was genau womit kollidiert und ob es überhaupt eine Rolle spielt.
+Mods machen sich gegenseitig stillschweigend kaputt. Wenn zwei Mods dieselbe Spielfunktion verändern, gewinnt meist der zuletzt geladene – die Arbeit des anderen Mods verschwindet einfach: kein Fehler, kein Absturz, keine Erklärung. ModMixer findet diese Konflikte, erklärt sie in klaren Worten und gibt dir eine Schaltzentrale, um sie zu klären.
 
-WAS ES MACHT
-- Untersucht beim Start jeden Lua-Hook in deinem gesamten Mod-Bestand und schreibt einen übersichtlichen, nach Schweregrad sortierten Konfliktbericht in die Datei ModMixer.log (direkt neben deinem Spiel-Log).
-- Hebt die Konflikte hervor, die wirklich zählen – fehlerhafte Überschreibungen, die die Arbeit eines anderen Mods verwerfen, Fallstricke bei der Ladereihenfolge und inkompatible Mods, die dasselbe System ersetzen – und schweigt bei den harmlosen.
-- Warnt dich direkt am Bildschirm, wenn zwei wirklich inkompatible Mods installiert sind, damit du weißt, dass du einen entfernen solltest.
-- Wo eine Korrektur sicher und nachweislich richtig ist, repariert ModMixer die Hook-Kette automatisch zur Laufzeit und unterdrückt bekannten Log-Spam von Drittanbieter-Mods. Alles Übrige wird mit einer verständlichen Erklärung protokolliert, damit du entscheidest.
+DAS SWITCHBOARD
+Eine komplette Schaltzentrale im Ingame-Menü (achte auf das ModMixer-Symbol), sieben Reiter:
+- SIMPLE – Sortiere deine Mods nach Rang; ein höher gesetzter Mod gewinnt seine Konflikte überall. Für die meisten Setups reicht das völlig.
+- LIVE – Sofort-Einstellungen, die deine Mods anbieten (Schalter und Regler), wirken direkt im Spiel.
+- CATEGORY – Dieselbe Rangfolge, Bereich für Bereich: Räder, HUD, Wirtschaft, Wetter ...
+- ADVANCED – Jede umkämpfte Funktion mit ihrer kompletten Hook-Kette: wer zuerst läuft, wer wen überschreibt. Kette umsortieren oder ein Überschreiben stummschalten, pro Konflikt.
+- REVIEW – Einen Blick wert: wahrscheinliche Mod-Dubletten, bekannte inkompatible Paare, HUD-Überlappungen – jeweils mit Belegen. Erledigtes lässt sich ausblenden.
+- PERFORMANCE – Live-Kosten pro Mod (ms pro Frame) gegen dein FPS-Budget. Finde den Mod, der deine Framerate frisst, und parke ihn, ohne ihn zu deinstallieren.
+- VEHICLE – Live-Diagnose der Maschine, in der du sitzt: Schaden, Verschleiß, Temperatur, Geschwindigkeit, Masse, Grip pro Rad.
 
-Keine Konfiguration. Keine Gameplay-Änderungen. Keine Laufzeitkosten nach dem Laden der Karte. Multiplayer-tauglich.
+Jede Zeile wird verständlich erklärt. Dazu gibt es weiterhin den Konfliktbericht beim Start (ModMixer.log, neben deinem Spiel-Log) und eine Bildschirmwarnung, wenn zwei wirklich inkompatible Mods installiert sind.
 
-NEU IN 1.2
-ModMixer ist jetzt ein einzelner Mod – kein Begleit-Preloader mehr erforderlich. Hook-Instrumentierung und Konfliktanalyse sind vollständig integriert.
+AUF SICHERHEIT GEBAUT
+- Strukturelle Änderungen (Umsortieren, Stummschalten) greifen erst nach einem Neustart – nichts wird mitten im Spiel umverdrahtet.
+- Ladekritische Funktionen sind gesperrt und können nie blockiert werden.
+- Schlägt ein Start fehl, startet der nächste automatisch im abgesicherten Modus (alle Eingriffe aus) – dein Spiel lädt immer.
+- Manueller Notschalter: lege eine leere Datei MODMIXER_SAFE_MODE.txt in modSettings/FS25_ModMixer/ an.
 
-NEU IN 1.1
-ModMixer bringt jetzt eine integrierte Konfliktdatenbank mit, die aus der Analyse hunderter Skript-Mods erstellt wurde. Zusätzlich zum handgeprüften Katalog erkennt es Konflikte nun allgemein – auch brandneue Mod-Kombinationen, die noch niemand dokumentiert hat – und kennzeichnet alles, was es nicht kennt, als "uncatalogued", damit nichts unbemerkt durchrutscht. Der handgeprüfte Katalog umfasst 57 Einträge.
+WICHTIG: Lass die Zip-Datei FS25_0_ModMixer.zip heißen – die 0 sorgt dafür, dass sie vor deinen anderen Mods lädt; nur so sieht ModMixer jeden Hook.
+
+Multiplayer: lädt und berichtet pro Client; die Eingriffe des Switchboards sind für den Einzelspieler gedacht.
+
+NEU IN 1.3
+Das Switchboard – die Schaltzentrale mit sieben Reitern – plus Performance-Profiler, Review-Hub, Fahrzeugdiagnose und das Sicherheitsnetz mit automatischer Boot-Wiederherstellung.
 
 GitHub:  https://github.com/AvolationIndustries/FS25_ModMixer
+Discord: https://discord.gg/jwgd9yU32N
 
 Von Avolation Industries.
         ]]></de>
         <fr><![CDATA[
-Les mods se cassent mutuellement, en silence. Quand deux mods modifient la même fonction du jeu, c'est généralement le dernier chargé qui l'emporte – et le travail de l'autre mod disparaît tout simplement : sans erreur, sans plantage, sans explication. ModMixer détecte ces conflits et vous explique clairement ce qui entre en conflit avec quoi, et si cela a vraiment de l'importance.
+Les mods se cassent mutuellement, en silence. Quand deux mods modifient la même fonction du jeu, c'est généralement le dernier chargé qui l'emporte – le travail de l'autre disparaît tout simplement : pas d'erreur, pas de plantage, pas d'explication. ModMixer détecte ces conflits, les explique clairement et vous donne un panneau de contrôle pour les régler.
 
-CE QU'IL FAIT
-- Analyse au démarrage chaque hook Lua de l'ensemble de vos mods et écrit un rapport de conflits clair, classé par gravité, dans le fichier ModMixer.log (à côté du journal du jeu).
-- Met en évidence les conflits qui comptent vraiment – les surcharges défectueuses qui écrasent le travail d'un autre mod, les pièges liés à l'ordre de chargement et les mods incompatibles qui remplacent le même système – et reste silencieux sur ceux qui sont sans conséquence.
-- Vous avertit à l'écran, en jeu, lorsque deux mods réellement incompatibles sont installés, pour que vous sachiez qu'il faut en retirer un.
-- Lorsqu'une correction est sûre et vérifiée, ModMixer répare automatiquement la chaîne de hooks à l'exécution et supprime le spam connu dans le journal provenant de mods tiers. Tout le reste est consigné avec une explication claire, pour que vous décidiez.
+LE SWITCHBOARD
+Un panneau de contrôle complet dans le menu en jeu (cherchez l'icône ModMixer), sept onglets :
+- SIMPLE – Classez vos mods ; un mod mieux classé gagne ses conflits partout. Suffit dans la plupart des cas.
+- LIVE – Les réglages instantanés exposés par vos mods (interrupteurs et curseurs), appliqués immédiatement en jeu.
+- CATEGORY – Le même classement, domaine par domaine : roues, HUD, économie, météo...
+- ADVANCED – Chaque fonction disputée avec sa chaîne de hooks complète : qui s'exécute en premier, qui écrase qui. Réordonnez la chaîne ou coupez un écrasement, conflit par conflit.
+- REVIEW – À examiner : doublons probables, paires incompatibles connues, chevauchements de HUD – preuves à l'appui. Masquez ce que vous avez tranché.
+- PERFORMANCE – Coût par mod en direct (ms par image) face à votre budget FPS. Trouvez le mod qui dévore vos FPS et mettez-le en sommeil sans le désinstaller.
+- VEHICLE – Diagnostic en direct de la machine que vous conduisez : dégâts, usure, température, vitesse, masse, adhérence roue par roue.
 
-Aucune configuration. Aucune modification du gameplay. Aucun coût de performance après le chargement de la carte. Compatible multijoueur.
+Chaque ligne est expliquée en langage clair. Vous conservez le rapport de conflits au démarrage (ModMixer.log, à côté du journal du jeu) et un avertissement à l'écran lorsque deux mods réellement incompatibles sont installés.
 
-NOUVEAU DANS LA 1.2
-ModMixer est désormais un mod unique – aucun préchargeur compagnon n'est requis. L'instrumentation des hooks et l'analyse des conflits sont entièrement intégrées.
+CONÇU POUR LA SÉCURITÉ
+- Les changements structurels (réordonner, couper) ne s'appliquent qu'au redémarrage – rien n'est recâblé en pleine partie.
+- Les fonctions critiques au chargement sont verrouillées et ne peuvent jamais être bloquées.
+- Si un démarrage échoue, le suivant se lance automatiquement en mode sans échec (tous les leviers désactivés) – votre partie charge toujours.
+- Coupe-circuit manuel : créez un fichier vide MODMIXER_SAFE_MODE.txt dans modSettings/FS25_ModMixer/.
 
-NOUVEAU DANS LA 1.1
-ModMixer intègre désormais une base de données de conflits générée à partir de l'analyse de centaines de mods de script. En plus de son catalogue vérifié à la main, il détecte maintenant les conflits de manière générale – y compris des combinaisons de mods inédites que personne n'a encore documentées – et signale tout ce qu'il ne reconnaît pas comme "uncatalogued", afin que rien ne passe inaperçu. Le catalogue vérifié à la main couvre 57 entrées.
+IMPORTANT : conservez le nom FS25_0_ModMixer.zip – le 0 le fait charger avant vos autres mods ; c'est ainsi que ModMixer voit chaque hook.
+
+Multijoueur : se charge et rapporte côté client ; les leviers du Switchboard sont conçus pour le solo.
+
+NOUVEAU DANS LA 1.3
+Le Switchboard – le panneau de contrôle à sept onglets – plus le profileur de performance, le hub Review, le diagnostic véhicule et le filet de sécurité avec récupération automatique au démarrage.
 
 GitHub :  https://github.com/AvolationIndustries/FS25_ModMixer
+Discord : https://discord.gg/jwgd9yU32N
 
 Par Avolation Industries.
         ]]></fr>

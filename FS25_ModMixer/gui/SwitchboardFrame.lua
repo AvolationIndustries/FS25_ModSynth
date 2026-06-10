@@ -924,14 +924,16 @@ local function vehicleStateRows()
     local okW, wheels = pcall(function() return v.spec_wheels and v.spec_wheels.wheels end)
     if okW and type(wheels) == "table" and #wheels > 0 then
         local function sideOf(w)
+            -- Wheel position in the VEHICLE's frame (getTranslation is parent-space, whose
+            -- X sign is meaningless here — it read "(L)" for every wheel). GIANTS vehicle
+            -- space: +X = left side.
             local ok, x = pcall(function()
                 local n = w.node or (w.physics and w.physics.wheel and w.physics.wheel.node)
-                if n == nil or getTranslation == nil then return nil end
-                local tx = getTranslation(n)
-                return tx
+                if n == nil or localToLocal == nil or v.rootNode == nil then return nil end
+                return (localToLocal(n, v.rootNode, 0, 0, 0))
             end)
             if ok and type(x) == "number" then
-                return (x < -0.05 and "L") or (x > 0.05 and "R") or "C"
+                return (x > 0.05 and "L") or (x < -0.05 and "R") or "C"
             end
             return "?"
         end

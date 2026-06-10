@@ -1,4 +1,4 @@
-﻿-- ModMixerHooks.lua  v1.2.0  — enriched interceptor + VETO (Switchboard S2).
+﻿-- ModMixerHooks.lua  v1.3.0  — enriched interceptor + VETO (Switchboard S2).
 -- Loaded FIRST (mod named FS25_0_ModMixer) so it patches Utils.* before any other
 -- mod registers a hook. It (1) records who hooks which curated target function, and
 -- (2) ENFORCES the user's veto choices: a hook the user vetoed last session is simply
@@ -11,7 +11,7 @@
 --   Utils.__ms_stats             = { calls, named }
 --   Utils.__ms_vetoApplied       = count of hooks skipped this load
 
-local MSH_VERSION = "1.2.0"
+local MSH_VERSION = "1.3.0"
 local function log(msg)
     print(string.format("[ModMixerHooks %s] %s", MSH_VERSION, tostring(msg)))
 end
