@@ -42,6 +42,7 @@ Utils.__ms_hooksByMod = {}
 Utils.__ms_fnNames    = {}
 Utils.__ms_stats      = { calls = 0, named = 0 }
 Utils.__ms_vetoApplied = 0
+Utils.__ms_reorderSkipped = {}   -- [target]=true when a saved reorder was REFUSED at load (UI surfaces it)
 local _untrackedByMod = {}   -- mod -> count of hooks on untracked fns (widen the net?)
 
 -- Distinct hook FUNCTIONS installed per target. A mod that re-registers the same
@@ -616,6 +617,9 @@ local function readReorders()
             log(string.format("REORDER SKIPPED for %s: contains an unidentified (unknown) hook — "
                 .. "cannot order a chain whose members aren't all named. Re-create it in the "
                 .. "Switchboard (hooks are inferred/named now).", target))
+            -- Surface the refusal in the UI (a silent skip looked like "Move does nothing":
+            -- the user reordered, restarted, and the row just kept its pending arrow forever).
+            Utils.__ms_reorderSkipped[target] = true
         elseif #mods > 0 then
             _reorderOrder[target] = mods
         end

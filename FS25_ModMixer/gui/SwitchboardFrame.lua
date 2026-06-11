@@ -422,6 +422,13 @@ local function helpForRow(row)
     elseif rt == "hook" then
         local s = targetHelp(row.featureId)
         if row.locked then s = s .. "\nLoad-critical \226\128\148 cannot be vetoed (removing it can hang the load)." end
+        if type(Utils) == "table" and type(Utils.__ms_reorderSkipped) == "table"
+           and Utils.__ms_reorderSkipped[row.featureId] == true then
+            s = s .. "\n\226\154\160 Your saved reorder for this function was REFUSED at load: it includes a hook that "
+                .. "was UNNAMED when you saved it, and ordering a chain with an anonymous member is guesswork "
+                .. "that can mis-wire a vehicle. Reset the row (Backspace), then re-create the order \226\128\148 "
+                .. "hooks are named by inference now, so the new one should apply."
+        end
         return s
     elseif rt == "vehicleState" then
         return "Live read-only state of your current vehicle (updates ~2x/sec). Wheel rows show "
@@ -1155,21 +1162,31 @@ function ModMixerSwitchboardFrame:collectRows()
                 elseif vetoed then stateText = "VETOED (restart)"
                 elseif isWinner then stateText = "WINNER (restart)"
                 elseif hasCustomOrder and consecutive then
-                    -- PENDING-AWARE: SB.reorders holds the DESIRED firing order; the live
-                    -- chain doesn't change until restart. Without the arrow + (restart),
-                    -- Move looked like a dead button (row kept its live position, nothing
-                    -- re-sorted, no tag — unlike VETOED/WINNER which always say restart).
-                    local wantIdx = nil
-                    local want = SB.getHookOrder ~= nil and SB.getHookOrder(target) or nil
-                    if type(want) == "table" then
-                        for wi, wm in ipairs(want) do if wm == modName then wantIdx = wi break end end
-                    end
-                    if wantIdx ~= nil and orderIdx ~= nil and wantIdx ~= orderIdx then
-                        local wantDisp = (nHook or 1) - wantIdx + 1
-                        stateText = string.format("reordered %d/%d \226\134\146 %d/%d (restart)%s",
-                            dispIdx, nHook, wantDisp, nHook, kindTag)
+                    -- REFUSED-AWARE: a saved order that included an "(unknown)" member is
+                    -- skipped by the load engine (it refuses to guess a chain). Say so on
+                    -- the row — the silent skip read as "Move does nothing" (Avo reordered
+                    -- MSP to the bottom, restarted, and nothing changed with no explanation).
+                    local refused = (type(Utils) == "table" and type(Utils.__ms_reorderSkipped) == "table")
+                        and Utils.__ms_reorderSkipped[target] == true
+                    if refused then
+                        stateText = "reorder REFUSED (unnamed hook) \226\128\148 reset row + redo" .. kindTag
                     else
-                        stateText = string.format("reordered %d/%d%s", dispIdx, nHook, kindTag)
+                        -- PENDING-AWARE: SB.reorders holds the DESIRED firing order; the live
+                        -- chain doesn't change until restart. Without the arrow + (restart),
+                        -- Move looked like a dead button (row kept its live position, nothing
+                        -- re-sorted, no tag — unlike VETOED/WINNER which always say restart).
+                        local wantIdx = nil
+                        local want = SB.getHookOrder ~= nil and SB.getHookOrder(target) or nil
+                        if type(want) == "table" then
+                            for wi, wm in ipairs(want) do if wm == modName then wantIdx = wi break end end
+                        end
+                        if wantIdx ~= nil and orderIdx ~= nil and wantIdx ~= orderIdx then
+                            local wantDisp = (nHook or 1) - wantIdx + 1
+                            stateText = string.format("reordered %d/%d \226\134\146 %d/%d (restart)%s",
+                                dispIdx, nHook, wantDisp, nHook, kindTag)
+                        else
+                            stateText = string.format("reordered %d/%d%s", dispIdx, nHook, kindTag)
+                        end
                     end
                 elseif consecutive then
                     stateText = string.format("%d/%d%s", dispIdx, nHook, kindTag)
