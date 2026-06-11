@@ -7,7 +7,7 @@
 
         <GuiElement profile="fs25_menuHeaderPanel">
             <Bitmap profile="fs25_menuHeaderIconBg">
-                <Bitmap profile="fs25_menuHeaderIcon" id="categoryHeaderIcon"/>
+                <Bitmap profile="ModMixer_menuHeaderIcon" id="categoryHeaderIcon"/>
             </Bitmap>
             <Text profile="fs25_menuHeaderTitle" id="categoryHeaderText"/>
         </GuiElement>

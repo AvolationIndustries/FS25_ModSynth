@@ -90,6 +90,16 @@ function Menu:loadMap(name)
     end
 
     local ok, err = pcall(function()
+        -- Register our UI sprite atlas (faders header glyph) before profiles load.
+        -- Clear-then-add so it survives a menu reload (TerraFarm's recipe). The header
+        -- profile references modMixer.icon_faders from gui/ui_elements.xml.
+        if g_overlayManager ~= nil then
+            if g_overlayManager.textureConfigs ~= nil then
+                g_overlayManager.textureConfigs["modMixer"] = nil
+            end
+            g_overlayManager:addTextureConfigFile(Menu.dir .. "gui/ui_elements.xml", "modMixer")
+        end
+
         g_gui:loadProfiles(Menu.dir .. "gui/guiProfiles.xml")
 
         local frame = ModMixerSwitchboardFrame.new(g_i18n)

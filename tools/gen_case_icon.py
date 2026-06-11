@@ -20,7 +20,7 @@ FOOT=(28,52,84,255); LATCH=(26,50,82,255); RIB=(30,54,86,255); BRACK=(26,50,82,2
 WHITE=(231,236,241,255); BRIGHT=(232,236,240,255); GREY=(154,163,173,255); SIL=(197,202,208,255)
 GREEN=(141,198,63,255); AMBER=(232,180,60,255); BLUE=(79,147,196,255); RED=(226,85,78,255)
 DKHOLE=(20,24,30,255); SCREEN=(14,18,24,255); TOG=(16,20,26,255); HANDLE=(48,72,104,255); CATCH=(72,105,140,255)
-STEEL=(58,67,79,255)
+STEEL=(58,67,79,255); HOLE=(0,0,0,0)  # transparent punch — needle becomes a window to the tab bg behind
 
 def P(x,y): return (x*SS, y*SS)
 def W(w): return max(1,int(round(w*SS)))
@@ -88,12 +88,13 @@ def draw_glyph2(d):
     gci(96,50,13,GREEN); gci(46,104,13,WHITE); gci(102,158,13,WHITE)
     gr(30,193,32,55,7,None,WHITE,3); gr(74,193,32,55,7,None,WHITE,3)
     gci(46,207,7,GREY); gci(46,221,10,BRIGHT); gci(90,235,7,GREY); gci(90,221,10,BRIGHT)
-    # right module: rpm gauge + dials. The gauge's "steel" sweep and the dial needle
-    # lines were dark-on-dark (invisible idle, dots-only when selected) — WHITE now
-    # so the full gauge ring + needles read in every state; amber/red tip unchanged.
+    # right module: rpm gauge + dials. Gauge ring/needle WHITE (reads in both states).
+    # Dial needles are PUNCHED TRANSPARENT (HOLE) — the needle is a window to the tab
+    # bg behind: idle shows the dark sidebar (dark needle, "like original"), selected
+    # shows the green tab (green needle) so the dials read as dials in both states.
     ga(191,84,52,152,270,9,WHITE); ga(191,84,52,270,355,9,AMBER); ga(191,84,52,355,388,9,RED)
     gc(191,84,225,58,6,WHITE); gci(191,84,7,WHITE)
-    gci(164,192,19,SIL); gc(164,192,153,180,4,WHITE); gci(218,192,19,SIL); gc(218,192,229,180,4,WHITE)
+    gci(164,192,19,SIL); gc(164,192,153,180,4,HOLE); gci(218,192,19,SIL); gc(218,192,229,180,4,HOLE)
     gci(180,234,6,AMBER); gci(206,234,6,SIL)
 
 def draw_glyph_mono(d):
@@ -132,11 +133,20 @@ case_T = T(1.05, -6.35, -6.9)
 img,d=new(); draw_shell(d); draw_modules(d,case_T); case=img.resize((512,512),Image.LANCZOS)
 img,d=new(); draw_glyph2(d); glyph=img.resize((256,256),Image.LANCZOS)
 
-def write_dds(path,im):
-    # Cert-allowed compressed DDS (DXT5 / BC3): smooth alpha, ~4:1 smaller than raw.
-    im.save(path, pixel_format="DXT5")
+def write_dds(path,im,fmt="DXT5"):
+    # gui glyphs = DXT5 (need smooth alpha). The SHOP icon (modIcon) must be DXT1
+    # per ModHub rules (TestRunner DXTCheck); DXT1 = 1-bit alpha, so it ships
+    # composited onto an opaque backplate below instead of transparent edges.
+    im.save(path, pixel_format=fmt)
 
-write_dds(os.path.join(SRC,"icon_ModMixer.dds"),case)
+# SHOP icon: case on opaque backplate (GIANTS template if present, else menu-dark) -> DXT1.
+_plate_path=os.path.join(PROJECT,"art","giants_template.png")
+if os.path.exists(_plate_path):
+    _plate=Image.open(_plate_path).convert("RGBA").resize((512,512),Image.LANCZOS)
+else:
+    _plate=Image.new("RGBA",(512,512),(30,32,34,255))
+_shop=_plate.copy(); _shop.alpha_composite(case)
+write_dds(os.path.join(SRC,"icon_ModMixer.dds"),_shop.convert("RGB"),"DXT1")
 write_dds(os.path.join(GUI,"menuIcon.dds"),glyph)
 imgh,dh=new(); draw_header(dh); header=imgh.resize((256,256),Image.LANCZOS)
 write_dds(os.path.join(GUI,"headerIcon.dds"),header)

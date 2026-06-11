@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ModMixer UI sprite atlas. Registered at load via
+     g_overlayManager:addTextureConfigFile(... "modMixer") in SwitchboardMenu.lua,
+     so slices are referenced in profiles as "modMixer.<id>".
+     headerIcon.dds is a single 256x256 glyph (four white faders) → one full-frame slice. -->
+<texture>
+    <meta>
+        <filename>headerIcon.dds</filename>
+        <size width="256" height="256" />
+    </meta>
+    <slices>
+        <slice id="icon_faders" uvs="0px 0px 256px 256px" />
+    </slices>
+</texture>

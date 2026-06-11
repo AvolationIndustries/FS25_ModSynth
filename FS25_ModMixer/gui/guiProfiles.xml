@@ -93,4 +93,15 @@
     <Profile name="ModMixer_tab" extends="fs25_subCategorySelectorTabbedTab" with="anchorTopLeft">
         <textSize value="14px" />
     </Profile>
+
+    <!-- Header badge icon: our faders glyph as an atlas slice (modMixer.icon_faders,
+         from gui/ui_elements.xml). Extends the stock header-icon profile so it inherits
+         the badge size; only the slice + tint change. WHY THE SLICE ROUTE: the stock
+         fs25_menuHeaderIcon carries its own atlas slice/UVs, so a runtime setImageFilename
+         swaps the file but keeps the old UVs → samples an empty region → blank green badge.
+         Pointing imageSliceId at our own registered slice is how NWT/TerraFarm do it. -->
+    <Profile name="ModMixer_menuHeaderIcon" extends="fs25_menuHeaderIcon">
+        <imageSliceId value="modMixer.icon_faders" />
+        <imageColor value="1 1 1 1" />
+    </Profile>
 </GUIProfiles>

@@ -52,6 +52,7 @@ ModMixer loads and reports per client. The Switchboard's levers (reorder, mute, 
 
 ## Known limitations
 
+- Hooks installed late (from inside a mod's load/update callbacks) can show as `(unknown — maybe: …)`. They're visible and counted, but a hook without a name can't be vetoed, reordered around, or ranked — ModMixer refuses those levers loudly instead of guessing. An attribution upgrade is planned.
 - A few HUD classes (e.g. the top info bar) load after mods hook them, so those overlaps are advisory — ModMixer flags them but can't attribute or mute a HUD draw.
 - Park reaches mods built as event listeners (most script mods); specialization-based mods can't be parked yet.
 - UI text is English for now; localisation is planned.

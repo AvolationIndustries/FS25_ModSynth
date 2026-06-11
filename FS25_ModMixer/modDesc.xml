@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
-<modDesc descVersion="105">
+<modDesc descVersion="109">
     <author>Avolation Industries</author>
     <version>1.3.0.0</version>
     <title>
         <en>ModMixer</en>
-        <de>ModMixer</de>
-        <fr>ModMixer</fr>
     </title>
     <description>
         <en><![CDATA[
@@ -33,12 +31,14 @@ IMPORTANT: keep the zip named FS25_0_ModMixer.zip — the 0 makes it load before
 
 Multiplayer: loads and reports per client; the Switchboard's levers are designed for singleplayer.
 
-NEW IN 1.3
-The Switchboard — the seven-tab control panel above — plus the performance profiler, the review hub, vehicle diagnostics, and the boot-recovery safety net.
+Changelog 1.3.0.0:
+- The Switchboard — the seven-tab control panel above
+- Performance profiler with live per-mod frame cost and Park
+- Review hub, vehicle diagnostics, and the boot-recovery safety net
 
 GitHub:  https://github.com/AvolationIndustries/FS25_ModMixer
 By Avolation Industries.
-        ]]></en>
+]]></en>
         <de><![CDATA[
 Mods machen sich gegenseitig stillschweigend kaputt. Wenn zwei Mods dieselbe Spielfunktion verändern, gewinnt meist der zuletzt geladene – die Arbeit des anderen Mods verschwindet einfach: kein Fehler, kein Absturz, keine Erklärung. ModMixer findet diese Konflikte, erklärt sie in klaren Worten und gibt dir eine Schaltzentrale, um sie zu klären.
 
@@ -64,12 +64,14 @@ WICHTIG: Lass die Zip-Datei FS25_0_ModMixer.zip heißen – die 0 sorgt dafür, 
 
 Multiplayer: lädt und berichtet pro Client; die Eingriffe des Switchboards sind für den Einzelspieler gedacht.
 
-NEU IN 1.3
-Das Switchboard – die Schaltzentrale mit sieben Reitern – plus Performance-Profiler, Review-Hub, Fahrzeugdiagnose und das Sicherheitsnetz mit automatischer Boot-Wiederherstellung.
+Changelog 1.3.0.0:
+- Das Switchboard – die Schaltzentrale mit sieben Reitern
+- Performance-Profiler mit Live-Kosten pro Mod und Parkfunktion
+- Review-Hub, Fahrzeugdiagnose und das Sicherheitsnetz mit automatischer Boot-Wiederherstellung
 
 GitHub:  https://github.com/AvolationIndustries/FS25_ModMixer
 Von Avolation Industries.
-        ]]></de>
+]]></de>
         <fr><![CDATA[
 Les mods se cassent mutuellement, en silence. Quand deux mods modifient la même fonction du jeu, c'est généralement le dernier chargé qui l'emporte – le travail de l'autre disparaît tout simplement : pas d'erreur, pas de plantage, pas d'explication. ModMixer détecte ces conflits, les explique clairement et vous donne un panneau de contrôle pour les régler.
 
@@ -95,12 +97,14 @@ IMPORTANT : conservez le nom FS25_0_ModMixer.zip – le 0 le fait charger avant 
 
 Multijoueur : se charge et rapporte côté client ; les leviers du Switchboard sont conçus pour le solo.
 
-NOUVEAU DANS LA 1.3
-Le Switchboard – le panneau de contrôle à sept onglets – plus le profileur de performance, le hub Review, le diagnostic véhicule et le filet de sécurité avec récupération automatique au démarrage.
+Changelog 1.3.0.0:
+- Le Switchboard – le panneau de contrôle à sept onglets
+- Profileur de performance avec coût par mod en direct et mise en sommeil
+- Hub Review, diagnostic véhicule et filet de sécurité avec récupération automatique au démarrage
 
 GitHub :  https://github.com/AvolationIndustries/FS25_ModMixer
 Par Avolation Industries.
-        ]]></fr>
+]]></fr>
     </description>
     <iconFilename>icon_ModMixer.dds</iconFilename>
     <multiplayer supported="true"/>
