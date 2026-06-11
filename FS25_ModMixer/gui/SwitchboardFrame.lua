@@ -1168,7 +1168,18 @@ function ModMixerSwitchboardFrame:collectRows()
                     -- MSP to the bottom, restarted, and nothing changed with no explanation).
                     local refused = (type(Utils) == "table" and type(Utils.__ms_reorderSkipped) == "table")
                         and Utils.__ms_reorderSkipped[target] == true
-                    if refused then
+                    -- PREDICTIVE: if the LIVE chain still has an unnamed member, ANY saved
+                    -- order will be refused at the next boot too — say so now instead of
+                    -- letting the user burn a restart finding out.
+                    local chainHasUnknown = false
+                    if type(hookerMods) == "table" then
+                        for _, hm in ipairs(hookerMods) do
+                            if hm == "(unknown)" then chainHasUnknown = true break end
+                        end
+                    end
+                    if chainHasUnknown then
+                        stateText = "reorder blocked \226\128\148 chain has an UNNAMED hook" .. kindTag
+                    elseif refused then
                         stateText = "reorder REFUSED (unnamed hook) \226\128\148 reset row + redo" .. kindTag
                     else
                         -- PENDING-AWARE: SB.reorders holds the DESIRED firing order; the live

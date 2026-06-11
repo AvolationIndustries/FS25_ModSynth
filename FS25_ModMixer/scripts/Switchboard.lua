@@ -1001,6 +1001,12 @@ function SB.moveHookInOrder(target, mod, dir, currentOrder)
     order[idx], order[j] = order[j], order[idx]
     SB.reorders[target] = order
     SB.save()
+    -- The boot-time "REFUSED" verdict described the OLD saved order; this save replaces
+    -- it. Clear the stale flag or the row keeps shouting REFUSED at a fresh order
+    -- (next boot re-judges — and re-sets the flag if the chain still has an unknown).
+    if type(Utils) == "table" and type(Utils.__ms_reorderSkipped) == "table" then
+        Utils.__ms_reorderSkipped[target] = nil
+    end
     return true
 end
 
@@ -1008,6 +1014,9 @@ end
 function SB.clearHookOrder(target)
     SB.reorders[target] = nil
     SB.save()
+    if type(Utils) == "table" and type(Utils.__ms_reorderSkipped) == "table" then
+        Utils.__ms_reorderSkipped[target] = nil   -- verdict was about the order we just dropped
+    end
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
