@@ -139,7 +139,7 @@ SB.registry = {
         features = {
             { id = "gripIntensity", label = "Wet Grip Intensity", kind = "value",
               min = 0.2, max = 2.5, step = 0.2, default = 1.0,
-              hint = "Instant \226\128\148 strongest in the wet; stock DDP mutes the effect at road speed." },
+              hint = "Instant \226\128\148 strongest in the wet. \226\154\160 DDP re-writes wheel grip EVERY TICK from a frozen base, so while it's installed OTHER mods' grip sliders (SeasonalTires\226\128\166) can't hold \226\128\148 to hand grip back, veto DDP on 'Wheel grip / sink (per-tick)' in Advanced (restart)." },
         },
         -- DDP reads WetWheelTracks.settings:getGripIntensity() per-tick (in
         -- getEffectStrength), so driving it is LIVE. NOTE: with STOCK DDP the wet
@@ -174,10 +174,10 @@ SB.registry = {
             -- range is [0.5, 1.0] (reduce below default) unless the cap is patched.
             { id = "mud_frictionModifier",       label = "Mud Tire Friction",        kind = "value",
               min = 0.5, max = 1.5, step = 0.1, default = 1.0,
-              hint = "Only vehicles ACTUALLY ON mud tires \226\128\148 ST defaults every vehicle to All-Season (check the Vehicle tab's tire-type row; change type in ST's own tire menu). Caps above 1.0 \226\128\148 working range 0.5\226\128\1471.0." },
+              hint = "Only vehicles ACTUALLY ON mud tires (Vehicle tab shows the type; ST defaults everything to All-Season). Range 0.5\226\128\1471.0 (caps above 1.0). \226\154\160 Can't hold while DynamicDrivePro's per-tick grip writer runs \226\128\148 see DDP's row." },
             { id = "allSeason_frictionModifier", label = "All-Season Tire Friction", kind = "value",
               min = 0.5, max = 1.5, step = 0.1, default = 1.0,
-              hint = "Vehicles on ALL-SEASON tires \226\128\148 ST's DEFAULT type for every vehicle, so this is the knob most machines feel. Felt under load; values above 1.0 are capped \226\128\148 use 0.5\226\128\1471.0." },
+              hint = "Vehicles on ALL-SEASON tires \226\128\148 ST's DEFAULT type, so this is the knob most machines feel. Range 0.5\226\128\1471.0 (caps above 1.0). \226\154\160 Can't hold while DynamicDrivePro's per-tick grip writer runs \226\128\148 see DDP's row." },
             { id = "snow_frictionModifier",      label = "Snow Tire Friction",       kind = "value",
               min = 0.5, max = 1.5, step = 0.1, default = 1.0,
               hint = "Vehicles on SNOW tires, felt under load. Values above 1.0 are capped by the mod \226\128\148 use 0.5\226\128\1471.0." },
