@@ -1158,9 +1158,24 @@ function ModMixerSwitchboardFrame:collectRows()
                 -- stays firing-order = install seq; we only flip what's shown.)
                 local dispIdx = (nHook or 1) - (orderIdx or 1) + 1
                 local stateText
+                local chainUnnamed = false
+                if type(hookerMods) == "table" then
+                    for _, hm in ipairs(hookerMods) do
+                        if hm == "(unknown)" then chainUnnamed = true break end
+                    end
+                end
                 if locked     then stateText = "load-critical"
-                elseif vetoed then stateText = "VETOED (restart)"
-                elseif isWinner then stateText = "WINNER (restart)"
+                elseif vetoed then
+                    -- An unnamed hook's stored veto can never fire (nothing to match at
+                    -- load) — don't promise "(restart)"; say the truth + the way out.
+                    stateText = (modName == "(unknown)")
+                        and "veto stored \226\128\148 can't fire (unnamed); X clears"
+                        or  "VETOED (restart)"
+                elseif isWinner then
+                    -- "Winner" mutes the NAMED rivals only; an unnamed one still runs.
+                    stateText = chainUnnamed
+                        and "WINNER (restart) \226\154\160 unnamed hook still runs"
+                        or  "WINNER (restart)"
                 elseif hasCustomOrder and consecutive then
                     -- REFUSED-AWARE: a saved order that included an "(unknown)" member is
                     -- skipped by the load engine (it refuses to guess a chain). Say so on
@@ -2110,6 +2125,18 @@ function ModMixerSwitchboardFrame:onActivate()
     -- Hook rows: flip veto. Load-critical rows are locked.
     if row.rowType == "hook" then
         if row.locked then return end
+        -- Vetoes match BY NAME when hooks install; an unnamed hook can't be matched,
+        -- so its veto would be stored but never fire — the row survives every restart
+        -- with an eternal "(restart)" tag (exactly what bit Avo). Refuse + explain.
+        if row.modName == "(unknown)" then
+            if self.featureHelp ~= nil then
+                pcall(function() self.featureHelp:setText(
+                    "Can't veto an UNNAMED hook \226\128\148 vetoes match by mod name when hooks install, "
+                    .. "and this one has no name, so the veto would never fire. If a likely owner has a "
+                    .. "kill switch (MudSystemPhysics engines, FarmKit wheel physics), flip it in the LIVE tab instead.") end)
+            end
+            return
+        end
         if SB.setHookVeto ~= nil and SB.isHookVetoed ~= nil then
             SB.setHookVeto(row.modName, row.featureId,
                            not SB.isHookVetoed(row.modName, row.featureId))
@@ -2228,6 +2255,32 @@ function ModMixerSwitchboardFrame:onExtra2()
 
     -- Consecutive hook rows: pick the winner (or clear the contest if already winner).
     if row.rowType == "hook" and row.consecutive and not row.locked and row.hookers ~= nil then
+        -- Winner = veto every rival, and vetoes fire BY NAME. An unnamed mod can't BE
+        -- the winner (its rivals' vetoes work, but crowning an anonymous hook is
+        -- nonsense), and a winner whose ONLY rival is unnamed mutes nothing — refuse
+        -- both with an explanation instead of storing dead vetoes.
+        if row.modName == "(unknown)" then
+            if self.featureHelp ~= nil then
+                pcall(function() self.featureHelp:setText(
+                    "Can't crown an UNNAMED hook \226\128\148 pick a named mod on this function instead.") end)
+            end
+            return
+        end
+        if not row.isWinner then
+            local namedRival = false
+            for _, m in ipairs(row.hookers) do
+                if m ~= row.modName and m ~= "(unknown)" then namedRival = true break end
+            end
+            if not namedRival then
+                if self.featureHelp ~= nil then
+                    pcall(function() self.featureHelp:setText(
+                        "Winner would mute NOTHING here \226\128\148 this mod's only rival is an unnamed hook, and "
+                        .. "vetoes can't match a hook with no name. If a likely owner has a kill switch "
+                        .. "(MudSystemPhysics engines, FarmKit wheel physics), flip it in the LIVE tab instead.") end)
+                end
+                return
+            end
+        end
         if row.isWinner then
             if SB.clearHookContest ~= nil then
                 SB.clearHookContest(row.featureId, row.hookers)
