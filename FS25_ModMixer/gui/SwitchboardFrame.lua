@@ -1247,6 +1247,34 @@ function ModMixerSwitchboardFrame:collectRows()
         end
     end
 
+    -- APPLIED vetoes: a vetoed hook is skipped at install AND not recorded, so its row
+    -- vanished from this list after the restart — leaving NO way to un-veto from the UI
+    -- (the veto sat in switchboard.xml forever; only Reset-All could reach it). Synthesize
+    -- a display row for every stored veto whose mod is installed but has no live hook on
+    -- that target (= the veto fired). Space on it flips the veto off as usual.
+    if SB.vetoes ~= nil then
+        local reg = (type(Utils) == "table") and Utils.__ms_hooksByMod or nil
+        for key in pairs(SB.vetoes) do
+            local vMod, vTarget = string.match(key, "^(.-)|(.+)$")
+            if vMod ~= nil and vTarget ~= nil and vMod ~= "(unknown)" then
+                local installed = g_modManager ~= nil and g_modManager:getModByName(vMod) ~= nil
+                local liveHook  = reg ~= nil and reg[vMod] ~= nil and reg[vMod][vTarget] ~= nil
+                if installed and not liveHook then
+                    local info = nil
+                    pcall(function() info = ModMixerCategoryOf ~= nil and ModMixerCategoryOf(vTarget) end)
+                    data[#data + 1] = {
+                        rowType = "hook", category = info or "Other",
+                        modName = vMod, modLabel = (string.gsub(vMod, "^FS25_", "")),
+                        featureId = vTarget, featureLabel = areaName(vTarget) .. "   \226\128\148   " .. vTarget,
+                        locked = false, consecutive = false, hookers = { vMod },
+                        stateText = "VETOED \226\156\147 applied \226\128\148 Space restores (restart)",
+                        orderIdx = 1, reorderable = false, hasCustomOrder = false,
+                    }
+                end
+            end
+        end
+    end
+
     -- Live vehicle state used to ride along in Advanced under a "Current Vehicle" category;
     -- it now has its OWN tab (buildRows "vehicle" branch → vehicleStateRows), so it's no longer
     -- appended here. SHOW_VEHICLE_STATE still gates the tab's live tick.
