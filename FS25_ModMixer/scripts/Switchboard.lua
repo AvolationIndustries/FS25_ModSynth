@@ -87,14 +87,21 @@ SB.registry = {
         -- FarmKit's own settings UI is buggy; driving its flags IS the win, and
         -- it's pro-author (we keep users from uninstalling the whole mod).
         features = {
-            { id = "wheelPhysicsEnabled",    label = "Realistic Wheel Physics",   kind = "toggle" },
-            { id = "densityEnabled",         label = "Ground Density / Mud",      kind = "toggle" },
-            { id = "dustEnabled",            label = "Dust Particles",            kind = "toggle" },
+            { id = "wheelPhysicsEnabled",    label = "Realistic Wheel Physics",   kind = "toggle",
+              hint = "FarmKit's grip/sink subsystem \226\128\148 felt on worked (soft) ground, not on tarmac." },
+            { id = "densityEnabled",         label = "Ground Density / Mud",      kind = "toggle",
+              hint = "FarmKit's mud / ground-density system \226\128\148 shows on wet, worked fields." },
+            { id = "dustEnabled",            label = "Dust Particles",            kind = "toggle",
+              hint = "Dust kicked up on dry dirt \226\128\148 visible instantly while driving." },
             { id = "dustMultiplier",         label = "Dust Amount",               kind = "value",
-              min = 0.5, max = 5.0, step = 0.5, default = 2.0 },
-            { id = "plowingEnabled",         label = "Realistic Plowing",         kind = "toggle" },
-            { id = "realisticEngineEnabled", label = "Realistic Engine RPM",      kind = "toggle" },
-            { id = "hudEnabled",             label = "FarmKit HUD",               kind = "toggle" },
+              min = 0.5, max = 5.0, step = 0.5, default = 2.0,
+              hint = "How thick the dust is \226\128\148 visible instantly while kicking dust up." },
+            { id = "plowingEnabled",         label = "Realistic Plowing",         kind = "toggle",
+              hint = "Acts while a plow is working in the ground." },
+            { id = "realisticEngineEnabled", label = "Realistic Engine RPM",      kind = "toggle",
+              hint = "Engine RPM response \226\128\148 felt under load, in a running vehicle." },
+            { id = "hudEnabled",             label = "FarmKit HUD",               kind = "toggle",
+              hint = "FarmKit's own HUD overlay on/off \226\128\148 visible instantly in a vehicle." },
         },
 
         -- Drive FarmKit through its OWN public settings API so its menu, savefile
@@ -131,7 +138,8 @@ SB.registry = {
         author = "Papa_Matze",
         features = {
             { id = "gripIntensity", label = "Wet Grip Intensity", kind = "value",
-              min = 0.2, max = 2.5, step = 0.2, default = 1.0 },
+              min = 0.2, max = 2.5, step = 0.2, default = 1.0,
+              hint = "Instant \226\128\148 strongest in the wet; stock DDP mutes the effect at road speed." },
         },
         -- DDP reads WetWheelTracks.settings:getGripIntensity() per-tick (in
         -- getEffectStrength), so driving it is LIVE. NOTE: with STOCK DDP the wet
@@ -165,19 +173,25 @@ SB.registry = {
             -- the vehicle's own baseScale, so values > 1.0 here are neutralised — useful
             -- range is [0.5, 1.0] (reduce below default) unless the cap is patched.
             { id = "mud_frictionModifier",       label = "Mud Tire Friction",        kind = "value",
-              min = 0.5, max = 1.5, step = 0.1, default = 1.0 },
+              min = 0.5, max = 1.5, step = 0.1, default = 1.0,
+              hint = "Vehicles on MUD tires, felt under load. NOTE: the mod caps values above 1.0 (no effect) \226\128\148 working range is 0.5\226\128\1471.0." },
             { id = "allSeason_frictionModifier", label = "All-Season Tire Friction", kind = "value",
-              min = 0.5, max = 1.5, step = 0.1, default = 1.0 },
+              min = 0.5, max = 1.5, step = 0.1, default = 1.0,
+              hint = "Vehicles on ALL-SEASON tires, felt under load. Values above 1.0 are capped by the mod \226\128\148 use 0.5\226\128\1471.0." },
             { id = "snow_frictionModifier",      label = "Snow Tire Friction",       kind = "value",
-              min = 0.5, max = 1.5, step = 0.1, default = 1.0 },
+              min = 0.5, max = 1.5, step = 0.1, default = 1.0,
+              hint = "Vehicles on SNOW tires, felt under load. Values above 1.0 are capped by the mod \226\128\148 use 0.5\226\128\1471.0." },
             { id = "road_frictionModifier",      label = "Road Tire Friction",       kind = "value",
-              min = 0.5, max = 1.5, step = 0.1, default = 1.0 },
+              min = 0.5, max = 1.5, step = 0.1, default = 1.0,
+              hint = "Vehicles on ROAD tires, felt under load. Values above 1.0 are capped by the mod \226\128\148 use 0.5\226\128\1471.0." },
             -- rainBonus is added to baseFriction in rain (negative = penalty, 0 = neutral).
             -- mud default = 0 (no rain effect); allSeason/snow/road default = -0.1 (rain penalty).
             { id = "mud_rainBonus",       label = "Mud Tire Rain Bonus",      kind = "value",
-              min = -0.3, max = 0.3, step = 0.05, default = 0.0 },
+              min = -0.3, max = 0.3, step = 0.05, default = 0.0,
+              hint = "Only acts WHILE IT'S RAINING, on mud tires." },
             { id = "allSeason_rainBonus", label = "All-Season Rain Bonus",    kind = "value",
-              min = -0.3, max = 0.1, step = 0.05, default = -0.1 },
+              min = -0.3, max = 0.1, step = 0.05, default = -0.1,
+              hint = "Only acts WHILE IT'S RAINING, on all-season tires." },
         },
         apply = function(featureId, value)
             local TM = modGlobal("FS25_SeasonalTires", "TireManager")
@@ -214,11 +228,16 @@ SB.registry = {
         -- These plain fields are checked per-tick inside EV's specialization update
         -- functions, so toggling them takes effect immediately.
         features = {
-            { id = "functionSnapIsEnabled",         label = "Steering Snap (angle assist)",  kind = "toggle" },
-            { id = "functionDiffIsEnabled",         label = "Differential Controls",         kind = "toggle" },
-            { id = "functionParkingBrakeIsEnabled", label = "Parking Brake",                 kind = "toggle" },
-            { id = "functionHydraulicIsEnabled",    label = "Hydraulic Controls",            kind = "toggle" },
-            { id = "functionOdoMeterIsEnabled",     label = "Odometer",                      kind = "toggle" },
+            { id = "functionSnapIsEnabled",         label = "Steering Snap (angle assist)",  kind = "toggle",
+              hint = "Gates EV's snap-steering assist \226\128\148 acts when you use EV's snap keys in a vehicle." },
+            { id = "functionDiffIsEnabled",         label = "Differential Controls",         kind = "toggle",
+              hint = "Gates EV's diff-lock controls (EV keybinds + HUD), in a vehicle." },
+            { id = "functionParkingBrakeIsEnabled", label = "Parking Brake",                 kind = "toggle",
+              hint = "Gates EV's parking-brake feature, in a vehicle." },
+            { id = "functionHydraulicIsEnabled",    label = "Hydraulic Controls",            kind = "toggle",
+              hint = "Gates EV's hydraulic shortcuts, in a vehicle." },
+            { id = "functionOdoMeterIsEnabled",     label = "Odometer",                      kind = "toggle",
+              hint = "Shows in EV's HUD \226\128\148 visible in a vehicle with the MOTOR RUNNING." },
         },
         apply = function(featureId, value)
             local EV = modGlobal("FS25_EnhancedVehicle", "FS25_EnhancedVehicle")
@@ -247,9 +266,11 @@ SB.registry = {
         author = "Papa_Matze",
         features = {
             { id = "RollingResistanceScale", label = "Rolling Resistance", kind = "value",
-              min = 0.5, max = 4.0, step = 0.5, default = 2.0 },
+              min = 0.5, max = 4.0, step = 0.5, default = 2.0,
+              hint = "Extra rolling drag on SOFT ground (fields) \226\128\148 minimal on roads." },
             { id = "HelperPhysicsFactor",    label = "Helper Physics",     kind = "value",
-              min = 0.5, max = 2.0, step = 0.1, default = 1.0 },
+              min = 0.5, max = 2.0, step = 0.1, default = 1.0,
+              hint = "AI HELPER vehicles only." },
         },
         apply = function(featureId, value)
             local R = modGlobal("FS25_REAwheels_by_Papa_Matze_v1_0_1", "REAwheels")
@@ -271,13 +292,17 @@ SB.registry = {
         author = "Unknown",
         features = {
             { id = "BrakeForceMultiplikator",        label = "Brake Force",            kind = "value",
-              min = 10, max = 80, step = 5, default = 40 },
+              min = 10, max = 80, step = 5, default = 40,
+              hint = "Felt WHILE BRAKING, in a moving vehicle." },
             { id = "frictionFrontMultiplikatorHigh", label = "Front Brake Grip (high)", kind = "value",
-              min = 0.5, max = 2.0, step = 0.1, default = 1.2 },
+              min = 0.5, max = 2.0, step = 0.1, default = 1.2,
+              hint = "Felt while braking HARD (front axle grip)." },
             { id = "frictionFrontMultiplikatorLow",  label = "Front Brake Grip (low)",  kind = "value",
-              min = 0.1, max = 1.0, step = 0.1, default = 0.3 },
+              min = 0.1, max = 1.0, step = 0.1, default = 0.3,
+              hint = "Felt while braking LIGHTLY (front axle grip)." },
             { id = "frictionRearMultiplikator",      label = "Rear Brake Grip",         kind = "value",
-              min = 5, max = 30, step = 1, default = 15 },
+              min = 5, max = 30, step = 1, default = 15,
+              hint = "Felt while braking (rear axle grip)." },
         },
         apply = function(featureId, value)
             local S = modGlobal("FS25_SplitBrakes", "SplitBrakes")
@@ -301,7 +326,8 @@ SB.registry = {
         author = "Unknown",
         features = {
             { id = "wearMultiplier", label = "Tire Wear Rate", kind = "value",
-              min = 0.0, max = 3.0, step = 0.25, default = 1.0 },
+              min = 0.0, max = 3.0, step = 0.25, default = 1.0,
+              hint = "How fast tires wear \226\128\148 accumulates over hours of driving; nothing visible instantly." },
         },
         apply = function(featureId, value)
             local T = modGlobal("FS25_TirePneumaticsMod", "TirePneumatics")
@@ -321,16 +347,27 @@ SB.registry = {
         label  = "REA Implements",
         author = "Papa_Matze",
         features = {
+            -- REA's update early-returns unless an attached implement is ACTIVELY
+            -- working (getIsWorkAreaActive) — every knob below is a no-op in the yard.
             { id = "ImplementResistance", label = "Implement Drag",        kind = "value",
-              min = 1.0, max = 5.0, step = 0.2, default = 2.6 },
+              min = 1.0, max = 5.0, step = 0.2, default = 2.6,
+              hint = "Only acts while an implement is WORKING IN THE GROUND \226\128\148 REA is idle otherwise. Felt as pull load." },
             { id = "PullForceScale",      label = "Pull Force",            kind = "value",
-              min = 1.0, max = 5.0, step = 0.2, default = 2.8 },
+              min = 1.0, max = 5.0, step = 0.2, default = 2.8,
+              hint = "Multiplies the working-implement drag \226\128\148 only while working in the ground." },
             { id = "SoilSinkFactor",      label = "Soil Softness",         kind = "value",
-              min = 0.5, max = 5.0, step = 0.5, default = 2.5 },
+              min = 0.5, max = 5.0, step = 0.5, default = 2.5,
+              hint = "Wheel grip on soft soil \226\128\148 only while an implement is actively working." },
             { id = "HelperWeightFactor",  label = "AI Helper Weight",      kind = "value",
-              min = 1.0, max = 4.0, step = 0.2, default = 2.4 },
+              min = 1.0, max = 4.0, step = 0.2, default = 2.4,
+              hint = "AI HELPER only, while its implement is working." },
             { id = "HelperGripBoost",     label = "AI Helper Grip",        kind = "value",
-              min = 1.0, max = 3.0, step = 0.2, default = 1.8 },
+              min = 1.0, max = 3.0, step = 0.2, default = 1.8,
+              hint = "AI HELPER only, while its implement is working." },
+            -- REA's own floating force readout (drawn only while the force applies) —
+            -- the perfect live proof that the sliders above bite.
+            { id = "Debug",               label = "Force Debug Overlay",   kind = "toggle",
+              hint = "Floating force readout above WORKING vehicles \226\128\148 watch the number move as you slide the knobs above." },
         },
         apply = function(featureId, value)
             local R = modGlobal("FS25_REA_by_Papa_Matze_v1_0_4", "REAimplements")
@@ -356,13 +393,17 @@ SB.registry = {
         author = "MoreRealistic Team",
         features = {
             { id = "SPRAYER_EMPTYSPEED_FX",        label = "Sprayer Discharge Speed",     kind = "value",
-              min = 0.5, max = 3.0, step = 0.25, default = 1.5 },
+              min = 0.5, max = 3.0, step = 0.25, default = 1.5,
+              hint = "Acts WHILE SPRAYING (tank empty rate)." },
             { id = "COMBINE_CAPACITY_FX",          label = "Combine Capacity",            kind = "value",
-              min = 0.5, max = 3.0, step = 0.25, default = 1.25 },
+              min = 0.5, max = 3.0, step = 0.25, default = 1.25,
+              hint = "Acts WHILE HARVESTING (grain tank fill)." },
             { id = "ENGINE_BRAKING_FX_DEFAULT",    label = "Engine Braking (standard)",   kind = "value",
-              min = 0.0, max = 2.0, step = 0.1, default = 0.85 },
+              min = 0.0, max = 2.0, step = 0.1, default = 0.85,
+              hint = "Felt on DECELERATION \226\128\148 pushed live onto the vehicle you're driving." },
             { id = "ENGINE_BRAKING_FX_HYDROSTATIC",label = "Engine Braking (hydrostatic)",kind = "value",
-              min = 0.0, max = 2.0, step = 0.1, default = 1.1 },
+              min = 0.0, max = 2.0, step = 0.1, default = 1.1,
+              hint = "Felt on deceleration in HYDROSTATIC vehicles you're driving." },
         },
         apply = function(featureId, value)
             local RM = modGlobal("MoreRealistic", "RealisticMain")

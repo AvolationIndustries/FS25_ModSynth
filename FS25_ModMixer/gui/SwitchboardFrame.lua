@@ -410,8 +410,15 @@ local function helpForRow(row)
     elseif rt == "basicInfo" then
         return row.featureLabel or ""
     elseif rt == "feature" then
-        return "Live setting from " .. (row.modLabel or "this mod")
-            .. ". Change it with the action keys; it applies immediately in-game."
+        -- The write always lands instantly (it's in the log) — but most of these
+        -- knobs live inside conditional mod code (only while working / braking /
+        -- raining / on AI...). Say WHERE it acts or a quiet knob reads as broken.
+        local s = "Live setting from " .. (row.modLabel or "this mod")
+            .. " \226\128\148 the value lands instantly; where you FEEL it depends on when that mod acts."
+        if row.hint ~= nil and row.hint ~= "" then
+            s = s .. "\nTAKES EFFECT: " .. row.hint
+        end
+        return s
     elseif rt == "hook" then
         local s = targetHelp(row.featureId)
         if row.locked then s = s .. "\nLoad-critical \226\128\148 cannot be vetoed (removing it can hang the load)." end
@@ -1023,7 +1030,7 @@ function ModMixerSwitchboardFrame:collectRows()
                         rowType = "feature", category = "Live Mod Features",
                         modName = modName, modLabel = entry.label or modName,
                         featureId = f.id, featureLabel = f.label or f.id,
-                        kind = kind, stateText = stateText,
+                        kind = kind, stateText = stateText, hint = f.hint,
                         vmin = f.min, vmax = f.max, vstep = f.step, vdefault = f.default,
                     }
                 end
@@ -1893,11 +1900,9 @@ function ModMixerSwitchboardFrame:onFrameOpen()
     if self.categoryHeaderText ~= nil then
         self.categoryHeaderText:setText("ModMixer - Switchboard")
     end
-    -- Swap the stock tractor header badge for our faders glyph (once per session).
-    if self.categoryHeaderIcon ~= nil and not self._hdrIconSet and MOD_DIR ~= nil then
-        pcall(function() self.categoryHeaderIcon:setImageFilename(Utils.getFilename("gui/headerIcon.dds", MOD_DIR)) end)
-        self._hdrIconSet = true
-    end
+    -- Header badge (faders glyph) is set declaratively now: the ModMixer_menuHeaderIcon
+    -- profile points imageSliceId at modMixer.icon_faders (registered in SwitchboardMenu).
+    -- A runtime setImageFilename here would swap the file but keep the slice UVs → blank.
     if ModMixerSwitchboard ~= nil and ModMixerSwitchboard.mode == "performance"
        and ModMixerSwitchboard.resetCostWindow ~= nil then
         pcall(ModMixerSwitchboard.resetCostWindow)   -- fresh window if we open into Performance
