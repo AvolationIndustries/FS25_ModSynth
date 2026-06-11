@@ -80,11 +80,24 @@ def deploy(path):
     if not os.path.isdir(MODS_DIR):
         sys.exit(f"ERROR: mods folder not found: {MODS_DIR}")
     dest = os.path.join(MODS_DIR, OUT_NAME)
+    # ATOMIC swap. A plain copy2 truncates + rewrites the destination in place,
+    # which leaves a torn-zip window — and the game reads the GUI XML at MISSION
+    # LOAD (not boot), so a deploy racing a savegame load blanks the Switchboard
+    # ("Could not open gui-config SwitchboardFrame.xml", seen 2026-06-11). Write
+    # a temp file beside it, then os.replace(): on Windows that's an atomic
+    # MoveFileEx — readers get the old zip or the new zip, never a half-written one
+    # (and if the file is locked it fails CLEANLY instead of tearing).
+    tmp = dest + ".deploying"
     try:
-        shutil.copy2(path, dest)
+        shutil.copy2(path, tmp)
+        os.replace(tmp, dest)
     except PermissionError:
-        sys.exit("ERROR: could not copy — is the game running? Close FS25 and retry.")
-    print(f"Deployed -> {dest}")
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        sys.exit("ERROR: zip is locked (game reading it right now?) — retry in a moment.")
+    print(f"Deployed -> {dest}  (atomic)")
 
 
 if __name__ == "__main__":
