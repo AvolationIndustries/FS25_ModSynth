@@ -926,6 +926,13 @@ local function vehicleStateRows()
         if v.getTotalMass == nil then return nil end
         return string.format("%.1f t", v:getTotalMass())
     end)
+    add("Tire type (SeasonalTires)", function()
+        -- ST stamps stTireType on every vehicle (default "allSeason"). Surfacing it
+        -- here tells you WHICH of ST's Live friction knobs applies to this machine —
+        -- sliding the mud knob while on all-seasons reads as "slider does nothing".
+        if v.stTireType == nil then return nil end
+        return tostring(v.stTireType)
+    end)
 
     -- ── Per-wheel MoreRealistic physics — the veer / grip diagnosis ──────────────
     -- MR computes each wheel's grip (tireGroundFrictionCoeff × mrDynamicFrictionScale),

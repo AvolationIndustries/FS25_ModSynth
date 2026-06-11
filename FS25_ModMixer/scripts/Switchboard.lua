@@ -174,10 +174,10 @@ SB.registry = {
             -- range is [0.5, 1.0] (reduce below default) unless the cap is patched.
             { id = "mud_frictionModifier",       label = "Mud Tire Friction",        kind = "value",
               min = 0.5, max = 1.5, step = 0.1, default = 1.0,
-              hint = "Vehicles on MUD tires, felt under load. The mod caps values above 1.0 (no effect) \226\128\148 working range 0.5\226\128\1471.0. In mud, MudSystemPhysics' grip model dominates while ON (its toggle is in this tab)." },
+              hint = "Only vehicles ACTUALLY ON mud tires \226\128\148 ST defaults every vehicle to All-Season (check the Vehicle tab's tire-type row; change type in ST's own tire menu). Caps above 1.0 \226\128\148 working range 0.5\226\128\1471.0." },
             { id = "allSeason_frictionModifier", label = "All-Season Tire Friction", kind = "value",
               min = 0.5, max = 1.5, step = 0.1, default = 1.0,
-              hint = "Vehicles on ALL-SEASON tires, felt under load. Values above 1.0 are capped by the mod \226\128\148 use 0.5\226\128\1471.0." },
+              hint = "Vehicles on ALL-SEASON tires \226\128\148 ST's DEFAULT type for every vehicle, so this is the knob most machines feel. Felt under load; values above 1.0 are capped \226\128\148 use 0.5\226\128\1471.0." },
             { id = "snow_frictionModifier",      label = "Snow Tire Friction",       kind = "value",
               min = 0.5, max = 1.5, step = 0.1, default = 1.0,
               hint = "Vehicles on SNOW tires, felt under load. Values above 1.0 are capped by the mod \226\128\148 use 0.5\226\128\1471.0." },
@@ -349,9 +349,15 @@ SB.registry = {
         features = {
             -- REA's update early-returns unless an attached implement is ACTIVELY
             -- working (getIsWorkAreaActive) — every knob below is a no-op in the yard.
+            -- HONESTY NOTE (source-audited): REA applies its drag as a tiny constant
+            -- addForce (max sliders ≈ 25 force units on multi-tonne machines) and its
+            -- grip tweak writes wheel.frictionScale on the Wheel TABLE (the engine
+            -- consumes wheel.physics.frictionScale — a different field). The knobs
+            -- land (log-verified) but the mod's felt effect in FS25 is ~cosmetic.
+            -- Hints say so; the Debug overlay shows the actual force number.
             { id = "ImplementResistance", label = "Implement Drag",        kind = "value",
               min = 1.0, max = 5.0, step = 0.2, default = 2.6,
-              hint = "Only acts while an implement is WORKING IN THE GROUND \226\128\148 REA is idle otherwise. Felt as pull load." },
+              hint = "Only acts while an implement is WORKING IN THE GROUND. Honest note: REA's drag is a tiny constant force (turn on its Debug overlay below to see it) \226\128\148 on heavy machines the felt change is minimal." },
             { id = "PullForceScale",      label = "Pull Force",            kind = "value",
               min = 1.0, max = 5.0, step = 0.2, default = 2.8,
               hint = "Multiplies the working-implement drag \226\128\148 only while working in the ground." },
