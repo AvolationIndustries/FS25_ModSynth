@@ -207,7 +207,27 @@ SB.registry = {
             local td = TM.tireTypes[tireType]
             if td == nil then return false, "unknown tire type: " .. tireType end
             td[field] = value
-            return true, string.format("TireManager.tireTypes.%s.%s", tireType, field)
+            -- ST's modifier is consumed inside WheelPhysics.updateTireFriction, which the
+            -- engine only calls when a wheel's friction is DIRTY (ground/wetness change).
+            -- Writing the table alone changes nothing until the next natural dirty event —
+            -- slide-and-wait read as "AWOL" (Avo, with a chain ST had all to itself).
+            -- Force the recompute now: mark every wheel friction-dirty (FarmKit's own
+            -- pattern) so the engine re-calls updateTireFriction next tick and the new
+            -- value is applied immediately.
+            pcall(function()
+                if g_currentMission ~= nil and g_currentMission.vehicles ~= nil then
+                    for _, veh in pairs(g_currentMission.vehicles) do
+                        local ws = veh.spec_wheels
+                        if ws ~= nil and ws.wheels ~= nil then
+                            for _, w in ipairs(ws.wheels) do
+                                local p = w.physics
+                                if p ~= nil then p.isFrictionDirty = true end
+                            end
+                        end
+                    end
+                end
+            end)
+            return true, string.format("TireManager.tireTypes.%s.%s (+friction refresh)", tireType, field)
         end,
         read = function(featureId)
             local TM = modGlobal("FS25_SeasonalTires", "TireManager")
