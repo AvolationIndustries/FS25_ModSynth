@@ -940,6 +940,28 @@ local function vehicleStateRows()
         if v.stTireType == nil then return nil end
         return tostring(v.stTireType)
     end)
+    add("ST effective friction (live)", function()
+        -- Run ST's OWN gate + friction function and show the result — engine source
+        -- (WheelPhysics.lua:852 postUpdate) proves the dirty→updateTireFriction path is
+        -- live, and ST's math checks out in source; the one unverifiable gate is
+        -- isWheelsVehicle's tire-track-nodes heuristic (TireManager.lua:154). This row
+        -- turns that last unknown into a readout instead of a fifth theory.
+        local env = _G["FS25_SeasonalTires"]
+        local TM = (type(env) == "table") and env.TireManager or nil
+        if TM == nil then return nil end
+        local w = v.spec_wheels and v.spec_wheels.wheels and v.spec_wheels.wheels[1]
+        local p = w and w.physics
+        if p == nil then return nil end
+        if type(TM.isWheelsVehicle) == "function" and not TM.isWheelsVehicle(v) then
+            return "GATED OFF \226\128\148 isWheelsVehicle=false (tire-track-node check, TireManager.lua:154)"
+        end
+        if type(TM.getEffectiveFriction) ~= "function" then return nil end
+        local ok, val = pcall(TM.getEffectiveFriction, v, p)
+        if ok and type(val) == "number" then
+            return string.format("%.2f \226\128\148 slider value IS flowing to physics", val)
+        end
+        return "error inside getEffectiveFriction"
+    end)
 
     -- ── Per-wheel MoreRealistic physics — the veer / grip diagnosis ──────────────
     -- MR computes each wheel's grip (tireGroundFrictionCoeff × mrDynamicFrictionScale),
