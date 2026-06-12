@@ -40,7 +40,7 @@ end
 Utils.__ms_registry   = {}
 Utils.__ms_hooksByMod = {}
 Utils.__ms_fnNames    = {}
-Utils.__ms_stats      = { calls = 0, named = 0 }
+Utils.__ms_stats      = { calls = 0, named = 0, fenvNamed = 0 }
 Utils.__ms_vetoApplied = 0
 Utils.__ms_reorderSkipped = {}   -- [target]=true when a saved reorder was REFUSED at load (UI surfaces it)
 local _untrackedByMod = {}   -- mod -> count of hooks on untracked fns (widen the net?)
@@ -892,6 +892,83 @@ local function resolveMod()
     return nil   -- deferred hook; the UI's scan-elimination names it from the hook-map
 end
 
+-- FENV FINGERPRINT — name a hook by the environment its FUNCTION was DEFINED in,
+-- independent of install context. GIANTS sandboxes each script mod into its own env
+-- table (_G[modName]); a function defined in a mod's files keeps that env for life,
+-- so getfenv(newFn) identifies the owner even when the install happens from a context
+-- no attribution rung reaches (MessageCenter dispatch, input/GUI callbacks, type-
+-- finalize paths — the surviving HIDDEN-HOOK class after rungs 1-5). debug.* is
+-- stripped in-game, but getfenv is plain base-library: Courseplay (ModHub-certified)
+-- ships getfenv(0) calls, proving it survives the sandbox. A load-time self-test
+-- verifies the function-arg form on one of OUR fns; on failure this resolver hard-
+-- disables (returns nil) so a broken probe can never produce a wrong name.
+local _getfenv = (type(getfenv) == "function") and getfenv or nil
+local _envToMod, _envMapTick = {}, -1
+local function fenvMod(fn)
+    if _getfenv == nil or type(fn) ~= "function" then return nil end
+    local ok, env = pcall(_getfenv, fn)
+    if not ok or type(env) ~= "table" then return nil end
+    local name = _envToMod[env]
+    if name ~= nil then return name end
+    -- Miss: mod envs appear one by one as mods load, so rebuild the reverse map —
+    -- but at most once per interceptor call (engine-env fns miss forever; without
+    -- this tick guard every untracked engine hook would trigger a full rebuild).
+    if Utils.__ms_stats.calls == _envMapTick then return nil end
+    _envMapTick = Utils.__ms_stats.calls
+    if g_modManager == nil or type(g_modManager.mods) ~= "table" then return nil end
+    local map = {}
+    for _, m in ipairs(g_modManager.mods) do
+        local mName = (type(m) == "table") and m.modName or nil
+        if type(mName) == "string" and mName ~= "" then
+            local mEnv = _G[mName]
+            if type(mEnv) == "table" then map[mEnv] = mName end
+        end
+    end
+    _envToMod = map
+    return _envToMod[env]
+end
+do  -- self-test: fingerprint one of our own functions back to our own env.
+    -- Hard-disable ONLY if the function-arg form itself is unusable (errors / non-
+    -- table). An identity mismatch against _G[modName] can't produce wrong names —
+    -- the map is keyed by table IDENTITY, so a bad assumption only yields misses —
+    -- but it would make the rung inert, so log which verdict this sandbox gives.
+    local usable, verdict = false, "getfenv missing"
+    if _getfenv ~= nil then
+        local probe = function() end
+        local ok, env = pcall(_getfenv, probe)
+        if ok == true and type(env) == "table" then
+            usable = true
+            local mine = (g_currentModName ~= nil and g_currentModName ~= "")
+                and _G[g_currentModName] or nil
+            if mine ~= nil and env == mine then
+                verdict = "self-test OK: fn env == _G[modName]"
+            elseif mine == nil then
+                verdict = "env registry pending at load — identity check deferred to use-time"
+            else
+                verdict = "MISMATCH: fn env ~= _G[modName] — expect misses, never wrong names"
+            end
+        else
+            verdict = "getfenv(fn) rejected a function argument"
+        end
+    end
+    if usable then
+        log("FENV FINGERPRINT active: unnamed hooks resolve by their fn's defining env (" .. verdict .. ").")
+    else
+        _getfenv = nil
+        log("FENV FINGERPRINT degraded: " .. verdict .. " — env-based naming off "
+            .. "(unnamed hooks keep their maybe-lists).")
+    end
+end
+
+-- Capped log of fenv-named hooks, so the boot log shows the new rung earning its keep.
+local _fenvLogged = 0
+local function logFenv(target, mod, kind)
+    if _fenvLogged >= 12 then return end
+    _fenvLogged = _fenvLogged + 1
+    log(string.format("FENV NAME: %s -> %s (%s) — owner read from the fn's defining env.",
+        tostring(mod), target, tostring(kind)))
+end
+
 -- Capped one-liner: note each deferred hook we couldn't name at load, so the log shows
 -- which curated targets carry an "(unknown)" the hook-map is expected to resolve.
 local _unknownLogged = 0
@@ -1102,6 +1179,16 @@ local function patched(orig, existingFn, newFn, kind)
         noteImpl(target, newFn)   -- distinct-impl tally (per-type dupe vs hidden 4th party)
         mod = resolveMod()
         if mod == nil then
+            -- Identity beats elimination: the fn's defining env names the owner exactly,
+            -- even from contexts no marker rung reaches (the last hidden-hook class).
+            -- Recorded as a plain name (not inferred) → veto/winner/reorder enforce on it.
+            mod = fenvMod(newFn)
+            if mod ~= nil then
+                Utils.__ms_stats.fenvNamed = Utils.__ms_stats.fenvNamed + 1
+                logFenv(target, mod, kind)
+            end
+        end
+        if mod == nil then
             mod = inferDeferredMod(target)
             if mod ~= nil then inferred = true end
         end
@@ -1111,7 +1198,7 @@ local function patched(orig, existingFn, newFn, kind)
     -- Gap 3: hook is on a function outside our named set — track which mods do this so
     -- coverageLog can flag them as candidates to add to gen_targets.py.
     if target == nil then
-        local m = resolveMod() or "(anonymous)"
+        local m = resolveMod() or fenvMod(newFn) or "(anonymous)"
         _untrackedByMod[m] = (_untrackedByMod[m] or 0) + 1
     end
 
@@ -1147,7 +1234,7 @@ local function patched(orig, existingFn, newFn, kind)
     -- function only it hooks (so not "contested"/named) — attribute those to the installer.
     local implToInstall = newFn
     if _hookProbeArmed then
-        local hookMod = mod or ((target == nil) and resolveMod()) or nil
+        local hookMod = mod or ((target == nil) and (resolveMod() or fenvMod(newFn))) or nil
         if hookMod ~= nil then implToInstall = _wrapHookTiming(hookMod, target, newFn) end
     end
     -- ATTRIBUTION (impl-execution marker): a named mod's impl EXECUTING is that mod's
@@ -1158,7 +1245,7 @@ local function patched(orig, existingFn, newFn, kind)
     -- hidden). Same impl-wrap pattern the cost probe proved live-safe; GIANTS' chain
     -- composition is untouched; record() still stores the ORIGINAL newFn.
     if _attribArmed then
-        local markMod = mod or ((target == nil) and resolveMod()) or nil
+        local markMod = mod or ((target == nil) and (resolveMod() or fenvMod(newFn))) or nil
         if markMod ~= nil then
             local inner = implToInstall
             implToInstall = function(...)
@@ -1223,8 +1310,8 @@ local function coverageLog()
     for _ in pairs(Utils.__ms_hooksByMod) do nMods = nMods + 1 end
 
     log(string.format("named %d target fns (WheelPhysics: %d). calls=%d, stored=%d across %d mods, "
-        .. "vetoes applied=%d.", nNames, nWheelPhysics, Utils.__ms_stats.calls, Utils.__ms_stats.named,
-        nMods, Utils.__ms_vetoApplied))
+        .. "vetoes applied=%d, fenv-named=%d.", nNames, nWheelPhysics, Utils.__ms_stats.calls,
+        Utils.__ms_stats.named, nMods, Utils.__ms_vetoApplied, Utils.__ms_stats.fenvNamed or 0))
 
     -- ── Chain summary: how many targets active, how many unknowns remain ──────
     local activeTargetSet = {}
@@ -1303,6 +1390,16 @@ local function coverageLog()
                 log(string.format("HIDDEN HOOK on %s: %d distinct hook fn(s) installed but only "
                     .. "%d mod(s) attributed -> a hook here comes from a dynamic pattern static "
                     .. "analysis can't name.", target, impls, named))
+                -- Characterize the survivors: with fenv naming live, anything still hidden
+                -- should be a fn defined OUTSIDE every mod env (engine-side, loadstring'd,
+                -- or re-env'd) — log the count so the next diagnosis starts with facts.
+                local noEnv = 0
+                for impl in pairs(Utils.__ms_implsSeen[target] or {}) do
+                    if fenvMod(impl) == nil then noEnv = noEnv + 1 end
+                end
+                log(string.format("  > %d of %d impl(s) on %s resolve to NO mod env "
+                    .. "(engine-defined or anonymous) — beyond Lua-side naming.",
+                    noEnv, impls, target))
             else
                 Utils.__ms_redundantUnknown[target] = true   -- per-type dupes of a named mod
             end
