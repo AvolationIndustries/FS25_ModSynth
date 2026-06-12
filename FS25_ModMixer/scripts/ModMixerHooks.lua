@@ -176,6 +176,80 @@ end
 -- buried — MSP, FarmKit and friends install their wheel hooks there).
 local MARK_METHODS = { "loadMap", "deleteMap", "mouseEvent", "keyEvent" }
 
+-- RUNG 4 — spec classes' STATIC initSpecialization. The engine calls it via
+-- g_asyncTaskManager during type building (+2s, SpecializationManager.lua:150) with NO
+-- mod context at all — this is where ADS-pattern specs plant their global overwrites
+-- (the 17:31:41 "deferred unknown" cluster: getCanMotorRun ×4, updateVehiclePhysics,
+-- updateConsumers). But addSpecialization RECEIVES the owner (customEnvironment arg,
+-- engine source :111) — wrap it on the SHARED class so all three managers are covered,
+-- and marker-wrap each MOD spec's initSpecialization/postInitSpecialization.
+if _attribArmed and type(SpecializationManager) == "table"
+   and type(SpecializationManager.addSpecialization) == "function" then
+    local _specInitWrapped = {}
+    local _origAddSpec = SpecializationManager.addSpecialization
+    SpecializationManager.addSpecialization = function(self, name, className, filename, customEnvironment, ...)
+        local ok = _origAddSpec(self, name, className, filename, customEnvironment, ...)
+        if ok == true and type(customEnvironment) == "string" and customEnvironment ~= "" then
+            pcall(function()
+                local cls = nil
+                if type(ClassUtil) == "table" and type(ClassUtil.getClassObject) == "function" then
+                    cls = ClassUtil.getClassObject(className)
+                end
+                if cls == nil then
+                    local env = _G[customEnvironment]
+                    if type(env) == "table" then cls = env[className] end
+                end
+                if type(cls) == "table" then
+                    for _, m in ipairs({ "initSpecialization", "postInitSpecialization" }) do
+                        local fn = cls[m]
+                        if type(fn) == "function" and not _specInitWrapped[fn] then
+                            _specInitWrapped[fn] = true
+                            local wrapped = function(...)
+                                local prev = _execMod
+                                _execMod = customEnvironment
+                                return _execRestore(prev, fn(...))
+                            end
+                            _specInitWrapped[wrapped] = true
+                            cls[m] = wrapped
+                        end
+                    end
+                end
+            end)
+        end
+        return ok
+    end
+    log("SPEC INIT MARK active: mod specs' static initSpecialization carries the attribution marker.")
+end
+
+-- RUNG 5 — async-task marker PROPAGATION (defensive: AsyncTaskManager is C-side /
+-- not in the engine dump, so we only act when there's something to carry). A task
+-- queued FROM a bracketed context (e.g. MSP's loadMap calling addSubtask) runs later
+-- with no context — the marker must travel with the task. When the marker is nil at
+-- queue time (the engine's own adds), the call passes through byte-identical.
+if _attribArmed then
+    pcall(function()
+        local atm = g_asyncTaskManager
+        if type(atm) ~= "table" or type(atm.addSubtask) ~= "function" then
+            log("async-task marker propagation skipped: g_asyncTaskManager not available at load.")
+            return
+        end
+        local _origAddSub = atm.addSubtask
+        atm.addSubtask = function(self, taskFn, ...)
+            if _execMod ~= nil and type(taskFn) == "function" then
+                local owner = _execMod
+                local inner = taskFn
+                taskFn = function(...)
+                    local prev = _execMod
+                    _execMod = owner
+                    return _execRestore(prev, inner(...))
+                end
+            end
+            return _origAddSub(self, taskFn, ...)
+        end
+        log("ASYNC MARK active: tasks queued from mod contexts carry the attribution marker.")
+    end)
+end
+
 -- Accrue elapsed time for a timed method. Multi-return-safe: orig's results pass through
 -- untouched, and an error inside orig propagates exactly as it would un-wrapped (we never
 -- pcall it — that would alter mod semantics + add overhead). Also tracks PEAK single-call
