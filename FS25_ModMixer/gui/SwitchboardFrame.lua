@@ -394,13 +394,13 @@ local function helpForRow(row)
     local rt = row.rowType
     if rt == "basicPriority" then
         return "SEATING \226\128\148 rank this mod. Higher = it wins its conflicts in EVERY category. "
-            .. "Promote (Space) or Move \226\150\178\226\150\188 to re-rank. Takes effect on RESTART."
+            .. "Promote (Space) or Move \226\150\178\226\150\188 to re-rank. Takes effect on RESTART; saved to disk instantly \226\128\148 no game save needed."
     elseif rt == "catPriority" then
         return "CATEGORY RANK \226\128\148 rank this mod within " .. (row.catName or "this realm")
-            .. ". Higher = it wins this realm's conflicts. Per-realm so it never competes with mods elsewhere. Takes effect on RESTART."
+            .. ". Higher = it wins this realm's conflicts. Per-realm so it never competes with mods elsewhere. Takes effect on RESTART; saved to disk instantly \226\128\148 no game save needed."
     elseif rt == "basicFight" then
         return "STOMP \226\128\148 one mod's version can override the others here. Change winner (Space) keeps "
-            .. "one; the rest sit out. Clear pick returns to your ranking. Takes effect on RESTART.\n" .. targetHelp(row.target)
+            .. "one; the rest sit out. Clear pick returns to your ranking. Takes effect on RESTART; saved instantly \226\128\148 no game save needed.\n" .. targetHelp(row.target)
     elseif rt == "basicShared" then
         return "SHARED \226\128\148 all these mods run together; the last one has the final say. Nothing is removed.\n"
             .. targetHelp(row.target)
@@ -483,9 +483,9 @@ end
 
 -- Bottom-legend text per tier.
 local TIER_LEGEND = {
-    seating  = "SIMPLE \226\128\148 start here; it's all most setups ever need. Rank your mods \226\128\148 a higher one wins its conflicts everywhere. Ranks apply on RESTART.",
+    seating  = "SIMPLE \226\128\148 start here; it's all most setups ever need. Rank your mods \226\128\148 a higher one wins its conflicts everywhere. Ranks apply on RESTART \226\128\148 saved instantly, no game save needed.",
     live     = "LIVE \226\128\148 instant settings your mods expose (toggles & sliders). Change them right here \226\128\148 it applies in-game immediately. \"SetByMod\" = the mod's own default.",
-    category = "BY CATEGORY \226\128\148 optional fine-tuning, one area at a time (wheels, HUD, economy\226\128\166). Simple already covers most cases. Ranks + winner picks apply on RESTART.",
+    category = "BY CATEGORY \226\128\148 optional fine-tuning, one area at a time (wheels, HUD, economy\226\128\166). Simple already covers most cases. Ranks + winner picks apply on RESTART \226\128\148 saved instantly, no game save needed.",
     advanced = "ADVANCED \226\128\148 power-user control, per conflict. #/# = stack position (1 = top = runs first); [ow] = wraps the inner ones (safe); \226\154\160 [ow!] = sits on top, overrides the mods below it (potential stomp). Move reorders, Make-Winner mutes \226\128\148 both need a restart.",
     review   = "REVIEW \226\128\148 worth a look: lookalike mods, known clashes, HUD overlaps. Pick a row for the evidence; Space dismisses ones you've judged.",
     performance = "PERFORMANCE \226\128\148 live per-mod cost (ms/frame) vs your 60fps budget. Click MOD or FEATURE to sort; Park (Space) reclaims a mod's per-frame work.",
