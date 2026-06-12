@@ -1076,6 +1076,24 @@ local function patched(orig, existingFn, newFn, kind)
         local hookMod = mod or ((target == nil) and resolveMod()) or nil
         if hookMod ~= nil then implToInstall = _wrapHookTiming(hookMod, target, newFn) end
     end
+    -- ATTRIBUTION (impl-execution marker): a named mod's impl EXECUTING is that mod's
+    -- code running — carry the marker so hooks installed from inside it get named.
+    -- This is the last big unnamed-source: mods that plant their hooks from inside
+    -- their own appends (MSP installs its wheel hooks from its loadMission00Finished
+    -- append → previously unnamed → inference named one engine, the other stayed
+    -- hidden). Same impl-wrap pattern the cost probe proved live-safe; GIANTS' chain
+    -- composition is untouched; record() still stores the ORIGINAL newFn.
+    if _attribArmed then
+        local markMod = mod or ((target == nil) and resolveMod()) or nil
+        if markMod ~= nil then
+            local inner = implToInstall
+            implToInstall = function(...)
+                local prev = _execMod
+                _execMod = markMod
+                return _execRestore(prev, inner(...))
+            end
+        end
+    end
     -- Always install via GIANTS' own wrapper (orig). We never substitute our closure on the
     -- overwrite hot path — see the STOMP VERDICT MAP note above for why (it hangs the load).
     local result = orig(existingFn, implToInstall)
