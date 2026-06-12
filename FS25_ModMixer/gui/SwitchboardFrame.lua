@@ -977,13 +977,12 @@ local function vehicleStateRows()
     local okW, wheels = pcall(function() return v.spec_wheels and v.spec_wheels.wheels end)
     if okW and type(wheels) == "table" and #wheels > 0 then
         local function sideOf(w)
-            -- ENGINE-SOURCE-BACKED (Wheel.lua:149): the Wheel object captures
-            -- startPositionX from its repr node at load — the DESIGNED lateral offset
-            -- in the component frame (+X = left). Both earlier attempts read a node
-            -- that sits on the axle centre (≈0 for every wheel → all "(C)").
-            local x = w.startPositionX
-            if type(x) ~= "number" then return "?" end
-            return (x > 0.05 and "L") or (x < -0.05 and "R") or "C"
+            -- THE ENGINE'S OWN FLAG (Wheel.lua:78): isLeft comes straight from the
+            -- vehicle XML. Attempts 1-3 guessed from node geometry and kept reading
+            -- axle-centre/steering-pivot nodes (all-L, then all-C, then fronts-C).
+            if w.isLeft == true  then return "L" end
+            if w.isLeft == false then return "R" end
+            return "?"
         end
         local grips = {}
         for i, w in ipairs(wheels) do

@@ -174,24 +174,24 @@ SB.registry = {
             -- range is [0.5, 1.0] (reduce below default) unless the cap is patched.
             { id = "mud_frictionModifier",       label = "Mud Tire Friction",        kind = "value",
               min = 0.5, max = 1.5, step = 0.1, default = 1.0,
-              hint = "\226\154\160 ST PORT BUG: in FS25 the friction function this feeds is (almost) never called \226\128\148 the value lands but the code never runs, so this slider is INERT. ST's tire-wear/type system is unaffected." },
+              hint = "MUD tires bite on HARD ground only: effective grip = slider, raw. On soft ground their softness bonus (+1.0 x depth) pushes the result past ST's cap-at-baseline \226\128\148 no effect in actual mud, by the mod's own math. Keep it at or below 1.0." },
             { id = "allSeason_frictionModifier", label = "All-Season Tire Friction", kind = "value",
               min = 0.5, max = 1.5, step = 0.1, default = 1.0,
-              hint = "\226\154\160 ST PORT BUG: in FS25 the friction function this feeds is (almost) never called \226\128\148 the value lands but the code never runs, so this slider is INERT. ST's tire-wear/type system is unaffected." },
+              hint = "ALL-SEASON (ST's default type): effective = slider on hard ground; soft ground SUBTRACTS 0.3 x depth (less grip in mud \226\128\148 the design). Values above 1.0 are capped." },
             { id = "snow_frictionModifier",      label = "Snow Tire Friction",       kind = "value",
               min = 0.5, max = 1.5, step = 0.1, default = 1.0,
-              hint = "\226\154\160 ST PORT BUG: feeds a friction function FS25 (almost) never calls \226\128\148 INERT slider; wear/type system unaffected." },
+              hint = "SNOW tires: effective = slider on any ground (no softness term); snow contact adds their bonus. Values above 1.0 are capped." },
             { id = "road_frictionModifier",      label = "Road Tire Friction",       kind = "value",
               min = 0.5, max = 1.5, step = 0.1, default = 1.0,
-              hint = "\226\154\160 ST PORT BUG: feeds a friction function FS25 (almost) never calls \226\128\148 INERT slider; wear/type system unaffected." },
+              hint = "ROAD tires: effective = slider on hard ground; soft ground subtracts a hefty 0.7 x depth (road tires hate mud \226\128\148 the design). Values above 1.0 are capped." },
             -- rainBonus is added to baseFriction in rain (negative = penalty, 0 = neutral).
             -- mud default = 0 (no rain effect); allSeason/snow/road default = -0.1 (rain penalty).
             { id = "mud_rainBonus",       label = "Mud Tire Rain Bonus",      kind = "value",
               min = -0.3, max = 0.3, step = 0.05, default = 0.0,
-              hint = "\226\154\160 ST PORT BUG: rain-only knob feeding the same never-called friction path \226\128\148 INERT in FS25." },
+              hint = "Adds to mud tires' grip WHILE IT'S RAINING (negative = penalty); the cap-at-baseline still applies to the total." },
             { id = "allSeason_rainBonus", label = "All-Season Rain Bonus",    kind = "value",
               min = -0.3, max = 0.1, step = 0.05, default = -0.1,
-              hint = "\226\154\160 ST PORT BUG: rain-only knob feeding the same never-called friction path \226\128\148 INERT in FS25." },
+              hint = "Adds to all-season grip WHILE IT'S RAINING (negative = penalty); the cap-at-baseline still applies to the total." },
         },
         apply = function(featureId, value)
             local TM = modGlobal("FS25_SeasonalTires", "TireManager")
@@ -390,10 +390,10 @@ SB.registry = {
             { id = "HelperGripBoost",     label = "AI Helper Grip",        kind = "value",
               min = 1.0, max = 3.0, step = 0.2, default = 1.8,
               hint = "AI HELPER only, while its implement is working." },
-            -- REA's own floating force readout (drawn only while the force applies) —
-            -- the perfect live proof that the sliders above bite.
-            { id = "Debug",               label = "Force Debug Overlay",   kind = "toggle",
-              hint = "Floating force readout above WORKING vehicles \226\128\148 watch the number move as you slide the knobs above." },
+            -- (A "Force Debug Overlay" toggle was offered briefly and REMOVED: REA calls
+            -- DebugUtil.drawDebugTextAtWorldPos, which does not exist in FS25's DebugUtil
+            -- (engine dump checked, 2026-06-12) — enabling it would error once the force
+            -- applies. Another FS22-ism in the REA family.)
         },
         apply = function(featureId, value)
             local R = modGlobal("FS25_REA_by_Papa_Matze_v1_0_4", "REAimplements")

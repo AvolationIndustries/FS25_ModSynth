@@ -152,13 +152,17 @@ local GATED_METHODS  = { "update", "draw" }
 local _attribArmed = false
 pcall(function()
     if type(getUserProfileAppPath) == "function" and type(fileExists) == "function" then
-        _attribArmed = fileExists(getUserProfileAppPath() .. "modSettings/FS25_ModMixer/MODMIXER_ATTRIB.txt")
+        -- DEFAULT ON (2026-06-12 hardening sprint; was opt-in for one build). The marker
+        -- rides the proven hibernate wrappers; opt OUT with MODMIXER_NO_ATTRIB.txt.
+        _attribArmed = not fileExists(getUserProfileAppPath() .. "modSettings/FS25_ModMixer/MODMIXER_NO_ATTRIB.txt")
     end
 end)
 local _execMod = nil
 if _attribArmed then
-    log("ATTRIB MARKER ARMED (MODMIXER_ATTRIB.txt present) \226\128\148 listener callbacks set a "
-        .. "currently-executing-mod marker; hooks installed mid-callback get REAL NAMES this boot.")
+    log("ATTRIB MARKER ACTIVE (default) \226\128\148 listener callbacks set a currently-executing-mod "
+        .. "marker; hooks installed mid-callback get REAL NAMES. Disable: MODMIXER_NO_ATTRIB.txt")
+else
+    log("ATTRIB MARKER DISABLED (MODMIXER_NO_ATTRIB.txt present) \226\128\148 late hooks may show as (unknown).")
 end
 -- Tail-position restore (same vararg trick as _accrue): restores the outer marker and
 -- passes orig's returns through untouched. An error inside orig skips the restore —
@@ -346,15 +350,21 @@ if _hookProbeArmed and type(SpecializationUtil) == "table"
 
     local function _specLabel(specTable)
         local ok, nm = pcall(function()
-            local mgr = g_specializationManager
-            if mgr == nil then return nil end
-            for _, lst in ipairs({ mgr.specializationsByName, mgr.specializations }) do
-                if type(lst) == "table" then
-                    for k, e in pairs(lst) do
-                        if e == specTable then return (type(k) == "string") and k or nil end
-                        if type(e) == "table" and (e.object == specTable
-                           or e.specializationObject == specTable) then
-                            return e.name or ((type(k) == "string") and k or nil)
+            -- Scan ALL THREE spec managers (vehicle / placeable / hand-tool) — same set as
+            -- the lazy rev-map. Registration-time lookups that only asked the vehicle
+            -- manager were the main source of leftover "spec#N" labels.
+            for _, mgr in ipairs({ g_specializationManager, g_placeableSpecializationManager,
+                                   g_handToolSpecializationManager }) do
+                if type(mgr) == "table" then
+                    for _, lst in ipairs({ mgr.specializationsByName, mgr.specializations }) do
+                        if type(lst) == "table" then
+                            for k, e in pairs(lst) do
+                                if e == specTable then return (type(k) == "string") and k or nil end
+                                if type(e) == "table" and (e.object == specTable
+                                   or e.specializationObject == specTable) then
+                                    return e.name or ((type(k) == "string") and k or nil)
+                                end
+                            end
                         end
                     end
                 end

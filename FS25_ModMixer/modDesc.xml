@@ -109,6 +109,46 @@ Par Avolation Industries.
     <iconFilename>icon_ModMixer.dds</iconFilename>
     <multiplayer supported="true"/>
 
+    <!-- Action display names (kills the "Missing l10n input_ModMixer_SB_*" boot warnings;
+         these are what Settings > Controls shows for each binding). -->
+    <l10n>
+        <text name="input_ModMixer_SB_FILTER_PREV">
+            <en>ModMixer: previous category</en>
+            <de>ModMixer: vorherige Kategorie</de>
+            <fr>ModMixer : catégorie précédente</fr>
+        </text>
+        <text name="input_ModMixer_SB_FILTER_NEXT">
+            <en>ModMixer: next category</en>
+            <de>ModMixer: nächste Kategorie</de>
+            <fr>ModMixer : catégorie suivante</fr>
+        </text>
+        <text name="input_ModMixer_SB_MOVE_EARLIER">
+            <en>ModMixer: move hook earlier</en>
+            <de>ModMixer: Hook nach vorne schieben</de>
+            <fr>ModMixer : avancer le hook</fr>
+        </text>
+        <text name="input_ModMixer_SB_MOVE_LATER">
+            <en>ModMixer: move hook later</en>
+            <de>ModMixer: Hook nach hinten schieben</de>
+            <fr>ModMixer : reculer le hook</fr>
+        </text>
+        <text name="input_ModMixer_SB_RESET_ONE">
+            <en>ModMixer: reset row</en>
+            <de>ModMixer: Zeile zurücksetzen</de>
+            <fr>ModMixer : réinitialiser la ligne</fr>
+        </text>
+        <text name="input_ModMixer_SB_RESET_PAGE">
+            <en>ModMixer: reset page</en>
+            <de>ModMixer: Seite zurücksetzen</de>
+            <fr>ModMixer : réinitialiser la page</fr>
+        </text>
+        <text name="input_ModMixer_SB_RESET_ALL">
+            <en>ModMixer: reset all</en>
+            <de>ModMixer: alles zurücksetzen</de>
+            <fr>ModMixer : tout réinitialiser</fr>
+        </text>
+    </l10n>
+
     <!-- Custom input actions for the Switchboard in-game page.
          No default bindings here — they appear in Settings > Controls under "Other"
          so the player can assign whatever keys work for their layout.
