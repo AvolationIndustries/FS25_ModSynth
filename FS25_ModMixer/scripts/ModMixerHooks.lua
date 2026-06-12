@@ -139,6 +139,39 @@ local HIBERNATE_SKIP = { ["FS25_0_ModMixer"] = true, ["FS25_ModMixer"] = true }
 -- Input handlers fire only on actual input, not per-frame, so leaving them live costs nothing.
 local GATED_METHODS  = { "update", "draw" }
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- LATE-HOOK ATTRIBUTION MARKER (opt-in: MODMIXER_ATTRIB.txt in modSettings/FS25_ModMixer/)
+-- Most "(unknown)" hooks install from INSIDE a listener callback (MSP plants both
+-- engines' wheel hooks in loadMap) — after script-load time g_currentModName no longer
+-- says whose code is running, so resolveMod() comes up empty and the hook goes unnamed
+-- (unvetoable, unreorderable, invisible to Simple/Category). When ARMED, every wrapped
+-- listener method records "this mod's code is executing now" and resolveMod() reads the
+-- marker — hooks installed mid-callback get their real name, so vetoes match at install
+-- on the SAME boot. File absent → no marker writes, no extra wraps, byte-identical.
+-- ─────────────────────────────────────────────────────────────────────────────
+local _attribArmed = false
+pcall(function()
+    if type(getUserProfileAppPath) == "function" and type(fileExists) == "function" then
+        _attribArmed = fileExists(getUserProfileAppPath() .. "modSettings/FS25_ModMixer/MODMIXER_ATTRIB.txt")
+    end
+end)
+local _execMod = nil
+if _attribArmed then
+    log("ATTRIB MARKER ARMED (MODMIXER_ATTRIB.txt present) \226\128\148 listener callbacks set a "
+        .. "currently-executing-mod marker; hooks installed mid-callback get REAL NAMES this boot.")
+end
+-- Tail-position restore (same vararg trick as _accrue): restores the outer marker and
+-- passes orig's returns through untouched. An error inside orig skips the restore —
+-- stale marker until the next listener call; acceptable for an opt-in diagnostic
+-- (never pcall mod code: that would alter semantics).
+local function _execRestore(prev, ...)
+    _execMod = prev
+    return ...
+end
+-- Lifecycle methods additionally wrapped when armed (loadMap is where the bodies are
+-- buried — MSP, FarmKit and friends install their wheel hooks there).
+local MARK_METHODS = { "loadMap", "deleteMap", "mouseEvent", "keyEvent" }
+
 -- Accrue elapsed time for a timed method. Multi-return-safe: orig's results pass through
 -- untouched, and an error inside orig propagates exactly as it would un-wrapped (we never
 -- pcall it — that would alter mod semantics + add overhead). Also tracks PEAK single-call
@@ -168,8 +201,21 @@ end
 local function _gateListenerMethod(listener, methodName, modName)
     local orig = listener[methodName]
     if type(orig) ~= "function" then return end          -- never ADD a method that wasn't there
-    if _now ~= nil and (methodName == "update" or methodName == "draw") then
-        local slot = (methodName == "update") and "upd" or "drw"
+    local timed = (_now ~= nil and (methodName == "update" or methodName == "draw"))
+    local slot  = (methodName == "update") and "upd" or "drw"
+    if _attribArmed then
+        -- Marker variant: record whose code is executing so resolveMod() can name hooks
+        -- installed from inside this callback. Save/restore handles nesting.
+        listener[methodName] = function(self, ...)
+            if _hibTable[modName] then return end
+            local prev = _execMod
+            _execMod = modName
+            if timed then
+                return _execRestore(prev, _accrue(modName, slot, _now(), orig(self, ...)))
+            end
+            return _execRestore(prev, orig(self, ...))
+        end
+    elseif timed then
         listener[methodName] = function(self, ...)
             if _hibTable[modName] then return end        -- parked → skip + cost nothing
             return _accrue(modName, slot, _now(), orig(self, ...))
@@ -194,6 +240,11 @@ local function _registerHibernatable(modName, listener)
     end
     lst[#lst + 1] = listener
     for _, m in ipairs(GATED_METHODS) do _gateListenerMethod(listener, m, modName) end
+    if _attribArmed then
+        -- loadMap & friends: where late hooks are actually planted. Armed-only so the
+        -- unarmed build wraps exactly what it always wrapped.
+        for _, m in ipairs(MARK_METHODS) do _gateListenerMethod(listener, m, modName) end
+    end
 end
 
 -- Registration interception. A bare-global override is env-LOCAL in FS25 (confirmed
@@ -697,6 +748,9 @@ Utils.__ms_isLoadCritical = isLoadCritical
 -- dataset scripts/mm_hookmap_generated.lua). The old debug-based source/stack matcher
 -- was removed 2026-06-04: it silently no-op'd in normal play (debug absent).
 local function resolveMod()
+    -- ATTRIB marker first (armed only; nil otherwise): the most specific answer —
+    -- whose listener callback is executing right now. Names the loadMap-planted hooks.
+    if _execMod ~= nil then return _execMod end
     if g_currentModName ~= nil and g_currentModName ~= "" then return g_currentModName end
     return nil   -- deferred hook; the UI's scan-elimination names it from the hook-map
 end
