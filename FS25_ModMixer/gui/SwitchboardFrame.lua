@@ -422,6 +422,12 @@ local function helpForRow(row)
     elseif rt == "hook" then
         local s = targetHelp(row.featureId)
         if row.locked then s = s .. "\nLoad-critical \226\128\148 cannot be vetoed (removing it can hang the load)." end
+        if ModMixerSwitchboard ~= nil and ModMixerSwitchboard.isHookVetoed ~= nil
+           and ModMixerSwitchboard.isHookVetoed(row.modName, row.featureId) then
+            s = s .. "\nVETO SCOPE: this silences ONE hook on ONE function \226\128\148 the mod itself keeps "
+                .. "running (its other hooks, listeners and any unnamed hooks are untouched). For full "
+                .. "silence on mods with unnamed hooks (e.g. MudSystemPhysics), use their kill switch in LIVE."
+        end
         if type(Utils) == "table" and type(Utils.__ms_reorderSkipped) == "table"
            and Utils.__ms_reorderSkipped[row.featureId] == true then
             s = s .. "\n\226\154\160 Your saved reorder for this function was REFUSED at load: it includes a hook that "
@@ -1279,12 +1285,28 @@ function ModMixerSwitchboardFrame:collectRows()
                 if installed and not liveHook then
                     local info = nil
                     pcall(function() info = ModMixerCategoryOf ~= nil and ModMixerCategoryOf(vTarget) end)
+                    -- SCOPE HONESTY: "VETOED" reads like a per-MOD verdict, but a veto kills
+                    -- ONE hook on ONE function. If the mod still has other live hooks (MSP
+                    -- famously does), say so on the row — or the user sees "MSP VETOED" while
+                    -- the mud visibly keeps running and concludes the label lies (Avo's exact
+                    -- read). Count the mod's remaining live hooks for the label.
+                    local others = 0
+                    if reg ~= nil and reg[vMod] ~= nil then
+                        for _ in pairs(reg[vMod]) do others = others + 1 end
+                    end
+                    local st
+                    if others > 0 then
+                        st = string.format(
+                            "VETOED \226\156\147 this hook only \226\128\148 mod still runs %d other hook(s); Space restores", others)
+                    else
+                        st = "VETOED \226\156\147 applied \226\128\148 Space restores (restart)"
+                    end
                     data[#data + 1] = {
                         rowType = "hook", category = info or "Other",
                         modName = vMod, modLabel = (string.gsub(vMod, "^FS25_", "")),
                         featureId = vTarget, featureLabel = areaName(vTarget) .. "   \226\128\148   " .. vTarget,
                         locked = false, consecutive = false, hookers = { vMod },
-                        stateText = "VETOED \226\156\147 applied \226\128\148 Space restores (restart)",
+                        stateText = st,
                         orderIdx = 1, reorderable = false, hasCustomOrder = false,
                     }
                 end
