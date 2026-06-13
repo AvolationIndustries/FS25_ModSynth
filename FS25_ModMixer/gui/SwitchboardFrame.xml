@@ -12,30 +12,39 @@
             <Text profile="fs25_menuHeaderTitle" id="categoryHeaderText"/>
         </GuiElement>
 
-        <!-- VIEW tabs (stock RedTape recipe): fs25_subCategorySelectorTabbedTab buttons, each
-             with a nested "background" bitmap (fs25_subCategorySelectorTabbedTabBg). Inactive =
-             white text, transparent fill; selected = green fill + black text. The frame overrides
-             getIsSelected on BOTH the button (text) and its background (fill) in
-             onGuiSetupFinished so they follow the live mode. Kept left of the help box (x<580). -->
-        <Button profile="ModMixer_tab" id="tab1" text="Simple"      position="20px -58px"  size="72px 40px"  onClick="onTab1">
+        <!-- VIEW tabs, GROUPED BY LEVEL. Three clusters, spaced + coloured so the user knows at a
+             glance what they're working at, with a coloured header label over each cluster sitting
+             in the empty band between the title and the tab row:
+               amber  Simple / Category / Advanced  = conflict resolution, applied at boot (RESTART)
+               green  Live / Vehicle / Performance   = live runtime tuning / observation (instant)
+               grey   Review                          = advisory info
+             Stock RedTape recipe per tab (fs25_subCategorySelectorTabbedTab + nested "background"
+             bitmap); getIsSelected overridden on both in onGuiSetupFinished. Tabs + labels stay
+             left of the help box (x < 690). Tab id order (tab1..tab7) = the modes[] / onTabN order
+             in SwitchboardFrame.lua — keep the three in sync. -->
+        <Text profile="ModMixer_groupLabelRestart" text="Restart to apply" position="20px -42px"  size="290px 15px"/>
+        <Text profile="ModMixer_groupLabelLive"    text="Live - instant"   position="316px -42px" size="280px 15px"/>
+        <Text profile="ModMixer_groupLabelInfo"    text="Info"             position="614px -42px" size="120px 15px"/>
+
+        <Button profile="ModMixer_tab_restart" id="tab1" text="Simple"      position="20px -58px"  size="72px 40px"  onClick="onTab1">
             <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
         </Button>
-        <Button profile="ModMixer_tab" id="tab2" text="Live"        position="105px -58px" size="56px 40px"  onClick="onTab2">
+        <Button profile="ModMixer_tab_restart" id="tab2" text="Category"    position="103px -58px" size="88px 40px"  onClick="onTab2">
             <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
         </Button>
-        <Button profile="ModMixer_tab" id="tab3" text="Category"    position="174px -58px" size="90px 40px"  onClick="onTab3">
+        <Button profile="ModMixer_tab_restart" id="tab3" text="Advanced"    position="202px -58px" size="88px 40px"  onClick="onTab3">
             <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
         </Button>
-        <Button profile="ModMixer_tab" id="tab4" text="Advanced"    position="277px -58px" size="90px 40px"  onClick="onTab4">
+        <Button profile="ModMixer_tab_live" id="tab4" text="Live"        position="316px -58px" size="54px 40px"  onClick="onTab4">
             <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
         </Button>
-        <Button profile="ModMixer_tab" id="tab5" text="Review"      position="380px -58px" size="72px 40px"  onClick="onTab5">
+        <Button profile="ModMixer_tab_live" id="tab5" text="Vehicle"     position="381px -58px" size="76px 40px"  onClick="onTab5">
             <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
         </Button>
-        <Button profile="ModMixer_tab" id="tab6" text="Performance" position="465px -58px" size="122px 40px" onClick="onTab6">
+        <Button profile="ModMixer_tab_live" id="tab6" text="Performance" position="468px -58px" size="120px 40px" onClick="onTab6">
             <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
         </Button>
-        <Button profile="ModMixer_tab" id="tab7" text="Vehicle"     position="600px -58px" size="78px 40px"  onClick="onTab7">
+        <Button profile="ModMixer_tab_info" id="tab7" text="Review"      position="614px -58px" size="70px 40px"  onClick="onTab7">
             <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg" name="background"/>
         </Button>
 

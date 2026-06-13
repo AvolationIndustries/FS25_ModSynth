@@ -94,6 +94,39 @@
         <textSize value="14px" />
     </Profile>
 
+    <!-- Tabs are coloured by LEVEL so the user knows at a glance what they're working at:
+           amber = conflict resolution, applied at boot (changes need a RESTART)
+           green = live runtime tuning / observation (instant, no restart)
+           grey  = advisory info (Review)
+         Idle text takes the group colour; the selected tab still uses the stock green-fill /
+         black-text highlight (the "you are here"), and the coloured group labels above each
+         cluster carry the level even on the selected tab. -->
+    <Profile name="ModMixer_tab_restart" extends="ModMixer_tab">
+        <textColor value="0.95 0.66 0.18 1" />
+    </Profile>
+    <Profile name="ModMixer_tab_live" extends="ModMixer_tab">
+        <textColor value="0.40 0.85 0.28 1" />
+    </Profile>
+    <Profile name="ModMixer_tab_info" extends="ModMixer_tab">
+        <textColor value="0.72 0.72 0.68 1" />
+    </Profile>
+
+    <!-- Group header labels in the empty band between the title and the tab row. Sentence-case
+         (matches the approved mockup), bold, small, coloured to match each cluster's tabs. -->
+    <Profile name="ModMixer_groupLabel" extends="ModMixer_colHeader">
+        <textSize value="13px" />
+        <textUpperCase value="false" />
+    </Profile>
+    <Profile name="ModMixer_groupLabelRestart" extends="ModMixer_groupLabel">
+        <textColor value="0.95 0.66 0.18 1" />
+    </Profile>
+    <Profile name="ModMixer_groupLabelLive" extends="ModMixer_groupLabel">
+        <textColor value="0.40 0.85 0.28 1" />
+    </Profile>
+    <Profile name="ModMixer_groupLabelInfo" extends="ModMixer_groupLabel">
+        <textColor value="0.72 0.72 0.68 1" />
+    </Profile>
+
     <!-- Header badge icon: our faders glyph as an atlas slice (modMixer.icon_faders,
          from gui/ui_elements.xml). Extends the stock header-icon profile so it inherits
          the badge size; only the slice + tint change. WHY THE SLICE ROUTE: the stock

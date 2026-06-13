@@ -540,7 +540,9 @@ function ModMixerSwitchboardFrame:onGuiSetupFinished()
     -- getIsSelected() is true — so we override BOTH. Reads the LIVE mode, so the highlight stays
     -- correct with no per-switch bookkeeping.
     local tabs  = { self.tab1, self.tab2, self.tab3, self.tab4, self.tab5, self.tab6, self.tab7 }
-    local modes = { "seating", "live", "category", "advanced", "review", "performance", "vehicle" }
+    -- Grouped by level (must match tab1..tab7 in SwitchboardFrame.xml + onTabN below):
+    -- restart-to-apply [seating·category·advanced] · live [live·vehicle·performance] · info [review]
+    local modes = { "seating", "category", "advanced", "live", "vehicle", "performance", "review" }
     for i, btn in ipairs(tabs) do
         if btn ~= nil then
             local m = modes[i]
@@ -633,13 +635,15 @@ function ModMixerSwitchboardFrame:switchTier(mode)
     self:updateHelp()
     self:setMenuButtonInfoDirty()
 end
+-- Tab order grouped by level (matches tab1..tab7 in SwitchboardFrame.xml + modes[] above):
+-- restart-to-apply: Simple·Category·Advanced  ·  live: Live·Vehicle·Performance  ·  info: Review
 function ModMixerSwitchboardFrame:onTab1() self:switchTier("seating")     end
-function ModMixerSwitchboardFrame:onTab2() self:switchTier("live")        end
-function ModMixerSwitchboardFrame:onTab3() self:switchTier("category")    end
-function ModMixerSwitchboardFrame:onTab4() self:switchTier("advanced")    end
-function ModMixerSwitchboardFrame:onTab5() self:switchTier("review")      end
+function ModMixerSwitchboardFrame:onTab2() self:switchTier("category")    end
+function ModMixerSwitchboardFrame:onTab3() self:switchTier("advanced")    end
+function ModMixerSwitchboardFrame:onTab4() self:switchTier("live")        end
+function ModMixerSwitchboardFrame:onTab5() self:switchTier("vehicle")     end
 function ModMixerSwitchboardFrame:onTab6() self:switchTier("performance") end
-function ModMixerSwitchboardFrame:onTab7() self:switchTier("vehicle")     end
+function ModMixerSwitchboardFrame:onTab7() self:switchTier("review")      end
 
 -- Sortable Performance headers (TSSC-style): MOD = by name, FEATURE = by cost. Only acts in
 -- the Performance tier (the headers are shared across tiers); repeat clicks flip direction.
