@@ -693,7 +693,7 @@ do
         -- Spawn (ACTIVATE_OBJECT), Upgrade (MENU_EXTRA_1), Tag Place (MENU_CANCEL), Back, Visit,
         -- nav — so nothing real is lost and both Spawn + Upgrade fit. Entries with no inputAction
         -- pass through untouched.
-        local _declutterLogged, _dumpCount = 0, 0
+        local _declutterLogged, _dumpCount, _slotAudit = 0, 0, 0
         local _origAssignMBI = TabbedMenu.assignMenuButtonInfo
         TabbedMenu.assignMenuButtonInfo = function(self, info, ...)
             local use = info
@@ -743,7 +743,37 @@ do
                     end
                 end
             end
-            return _origAssignMBI(self, use, ...)
+            local ret = _origAssignMBI(self, use, ...)
+            -- SLOT AUDIT (one-shot, production footer): after layout, dump each PHYSICAL slot's
+            -- visible flag + action + rendered text + screen X. Reveals whether the 7 clean
+            -- buttons overflow off-screen (Upgrade not showing) or slots overlap (the phantom ESCs).
+            if _slotAudit < 3 and type(self.menuButton) == "table" then
+                local isProd = false
+                for _, btn in ipairs(self.menuButton) do
+                    local n = btn.inputActionName
+                    if n == "MENU_EXTRA_1" or n == "ACTIVATE_OBJECT" then isProd = true; break end
+                end
+                if isProd then
+                    _slotAudit = _slotAudit + 1
+                    pcall(function()
+                        local vis, parts = 0, {}
+                        for i, btn in ipairs(self.menuButton) do
+                            local v = btn.visible and true or false
+                            if v then vis = vis + 1 end
+                            local t
+                            if type(btn.getText) == "function" then
+                                local o, x = pcall(function() return btn:getText() end)
+                                if o then t = x end
+                            end
+                            local px = (type(btn.absPosition) == "table" and btn.absPosition[1])
+                                or (type(btn.position) == "table" and btn.position[1]) or nil
+                            parts[#parts + 1] = string.format("%d[%s %s'%s' x=%s]", i, v and "V" or "-", tostring(btn.inputActionName), tostring(t), tostring(px))
+                        end
+                        log("DECLUTTER slots (" .. #self.menuButton .. " total / " .. vis .. " visible): " .. table.concat(parts, " "))
+                    end)
+                end
+            end
+            return ret
         end
         log("MENU DE-CLUTTER active: one button per footer action (folds mods' duplicate UPGRADE/BACK etc.); distinct actions like Tag Place + Spawn + Upgrade all kept. Opt out: MODMIXER_NO_DECLUTTER.txt")
     else
