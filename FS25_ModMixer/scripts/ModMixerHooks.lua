@@ -684,78 +684,68 @@ do
     local optOut = (dir ~= "" and type(fileExists) == "function" and fileExists(dir .. "MODMIXER_NO_DECLUTTER.txt")) and true or false
     if (not _mmSafeMode(dir)) and (not optOut)
        and type(TabbedMenu) == "table" and type(TabbedMenu.assignMenuButtonInfo) == "function" then
-        -- A footer button is an EXIT (back/cancel) by its action NAME. menuButtonInfo carries the
-        -- action as a string name (the diag showed ia=MENU_BACK), so compare by tostring — robust
-        -- whether the value is a string, an id, or an enum. (The earlier InputAction[name]-keyed
-        -- set never matched the string names, so the exit-fold was inert — also why Tag Place was
-        -- never actually at risk.)
-        local function isExit(ia) local s = tostring(ia); return s == "MENU_BACK" or s == "MENU_CANCEL" end
-        local _declutterLogged, _footerAudit = 0, 0
+        -- DEDUP BY INPUT ACTION. The rendered-footer audit (2026-06-14) proved the mess is
+        -- DUPLICATE buttons: mods re-add UPGRADE (MENU_EXTRA_1) up to 3x and BACK (MENU_BACK,
+        -- blank label) 2-3x — the blank BACKs are the "extra ESCs", and the bloat is what flip-
+        -- flops Spawn/Upgrade for the last slot. A footer fires ONE action per key, so two buttons
+        -- on the same action are redundant: keep ONE per inputAction, preferring the labelled copy
+        -- (so 'BACK' wins over a blank, 'UPGRADE' is kept once). DISTINCT actions all survive —
+        -- Spawn (ACTIVATE_OBJECT), Upgrade (MENU_EXTRA_1), Tag Place (MENU_CANCEL), Back, Visit,
+        -- nav — so nothing real is lost and both Spawn + Upgrade fit. Entries with no inputAction
+        -- pass through untouched.
+        local _declutterLogged, _dumpCount = 0, 0
         local _origAssignMBI = TabbedMenu.assignMenuButtonInfo
         TabbedMenu.assignMenuButtonInfo = function(self, info, ...)
             local use = info
             if type(info) == "table" then
-                local ok, cleaned, dropped = pcall(function()
-                    local out, seenExit, seenKey, drops = {}, false, {}, {}
+                local ok, cleaned, drops = pcall(function()
+                    local out, seen, dropped = {}, {}, {}
                     for _, b in ipairs(info) do
-                        local drop = false
-                        if type(b) == "table" then
-                            local bare = (b.text == nil or b.text == "")
-                            if isExit(b.inputAction) and bare then
-                                -- BLANK exit (no label) = a redundant back/cancel hint. A repurposed
-                                -- exit that carries a real label (e.g. Tag Place on MENU_CANCEL) is
-                                -- KEPT — folding it would delete a function, not a duplicate.
-                                if seenExit then drop = true else seenExit = true end
+                        if type(b) ~= "table" or b.inputAction == nil then
+                            out[#out + 1] = b
+                        else
+                            local key = tostring(b.inputAction)
+                            local at = seen[key]
+                            if at == nil then
+                                out[#out + 1] = b
+                                seen[key] = #out
                             else
-                                -- exact-duplicate fold: same action + text + callback = redundant
-                                local k = tostring(b.inputAction) .. "\0" .. tostring(b.text) .. "\0" .. tostring(b.callback)
-                                if seenKey[k] then drop = true else seenKey[k] = true end
+                                -- duplicate action: keep the better-labelled of the two
+                                local keptBlank = (out[at].text == nil or out[at].text == "")
+                                local newBlank  = (b.text == nil or b.text == "")
+                                if keptBlank and not newBlank then out[at] = b end
+                                dropped[#dropped + 1] = key
                             end
                         end
-                        if drop then drops[#drops + 1] = (type(b) == "table" and (b.text or "(back)")) or "?"
-                        else out[#out + 1] = b end
                     end
-                    return out, drops
+                    return out, dropped
                 end)
                 if ok and type(cleaned) == "table" then
                     use = cleaned
-                    if type(dropped) == "table" and #dropped > 0 and _declutterLogged < 3 then
+                    -- one-shot dump of the REAL menuButtonInfo before/after on busy footers, so the
+                    -- duplicate set + what survived are visible (the rendered-slot audit was noisy
+                    -- because hidden physical slots keep stale text).
+                    if _dumpCount < 4 and #info > 6 then
+                        _dumpCount = _dumpCount + 1
+                        pcall(function()
+                            local function fmt(t)
+                                local p = {}
+                                for _, b in ipairs(t) do if type(b) == "table" then p[#p + 1] = tostring(b.inputAction) .. "'" .. tostring(b.text) .. "'" end end
+                                return table.concat(p, " ")
+                            end
+                            log("DECLUTTER in(" .. #info .. "): " .. fmt(info))
+                            log("DECLUTTER out(" .. #use .. "): " .. fmt(use))
+                        end)
+                    end
+                    if type(drops) == "table" and #drops > 0 and _declutterLogged < 3 then
                         _declutterLogged = _declutterLogged + 1
-                        pcall(function() log("DECLUTTER: folded " .. #dropped .. " redundant footer button(s): " .. table.concat(dropped, ", ")) end)
+                        pcall(function() log("DECLUTTER: folded " .. #drops .. " duplicate footer button(s) [" .. table.concat(drops, ",") .. "]") end)
                     end
                 end
             end
-            local ret = _origAssignMBI(self, use, ...)
-            -- RENDERED-FOOTER AUDIT (one-shot, capped, production footer only): after the engine
-            -- lays buttons into the physical slots, dump each slot's visible state + action name +
-            -- rendered text. This is what's ACTUALLY on screen (truncation, every source) — the
-            -- decisive view for the multi-ESC mess, beyond the menuButtonInfo data dump.
-            if _footerAudit < 6 and type(self.menuButton) == "table" then
-                local isProd = false
-                for _, btn in ipairs(self.menuButton) do
-                    local n = btn.inputActionName
-                    if n == "ACTIVATE_OBJECT" or n == "MENU_EXTRA_1" then isProd = true; break end
-                end
-                if isProd then
-                    _footerAudit = _footerAudit + 1
-                    pcall(function()
-                        local parts = {}
-                        for i, btn in ipairs(self.menuButton) do
-                            local vis = btn.visible
-                            local txt
-                            if type(btn.getText) == "function" then
-                                local o, t = pcall(function() return btn:getText() end)
-                                if o then txt = t end
-                            end
-                            parts[#parts + 1] = string.format("%d[vis=%s ia=%s txt='%s']", i, tostring(vis), tostring(btn.inputActionName), tostring(txt))
-                        end
-                        log("FOOTER AUDIT (" .. tostring(#self.menuButton) .. " slots): " .. table.concat(parts, " "))
-                    end)
-                end
-            end
-            return ret
+            return _origAssignMBI(self, use, ...)
         end
-        log("MENU DE-CLUTTER active: folds genuinely-redundant footer buttons (blank duplicate exits + exact dups); repurposed actions like Tag Place are kept. Opt out: MODMIXER_NO_DECLUTTER.txt")
+        log("MENU DE-CLUTTER active: one button per footer action (folds mods' duplicate UPGRADE/BACK etc.); distinct actions like Tag Place + Spawn + Upgrade all kept. Opt out: MODMIXER_NO_DECLUTTER.txt")
     else
         log("MENU DE-CLUTTER not installed (safe mode, opt-out file, or TabbedMenu unavailable at load).")
     end
