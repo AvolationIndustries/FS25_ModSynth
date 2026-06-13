@@ -722,6 +722,24 @@ do
                 end)
                 if ok and type(cleaned) == "table" then
                     use = cleaned
+                    -- PRIORITY ARRANGEMENT: the slot audit (2026-06-14) showed this footer renders
+                    -- only 6 visible slots but the list has 7 clean buttons, so the 7th (Upgrade,
+                    -- last) overflowed off the visible end. Demote low-value actions (Tag Place /
+                    -- MENU_CANCEL) to the TAIL so THEY take the overflow slot, never a must-have like
+                    -- Upgrade. Harmless when there's room (the demoted button still shows at the tail);
+                    -- only on a genuine overflow does it drop the visible row — and it still fires
+                    -- from its key. Stable sort: order within kept/tail groups is preserved.
+                    local ok2, ordered = pcall(function()
+                        local LOW = { MENU_CANCEL = true }   -- lowest-value footer actions
+                        local keep, tail = {}, {}
+                        for _, b in ipairs(use) do
+                            if type(b) == "table" and LOW[tostring(b.inputAction)] then tail[#tail + 1] = b
+                            else keep[#keep + 1] = b end
+                        end
+                        for _, b in ipairs(tail) do keep[#keep + 1] = b end
+                        return keep
+                    end)
+                    if ok2 and type(ordered) == "table" then use = ordered end
                     -- one-shot dump of the REAL menuButtonInfo before/after on busy footers, so the
                     -- duplicate set + what survived are visible (the rendered-slot audit was noisy
                     -- because hidden physical slots keep stale text).
@@ -775,7 +793,7 @@ do
             end
             return ret
         end
-        log("MENU DE-CLUTTER active: one button per footer action (folds mods' duplicate UPGRADE/BACK etc.); distinct actions like Tag Place + Spawn + Upgrade all kept. Opt out: MODMIXER_NO_DECLUTTER.txt")
+        log("MENU DE-CLUTTER active: one button per footer action + priority order (must-haves like Upgrade keep their slot; low-value Tag Place yields on overflow). Opt out: MODMIXER_NO_DECLUTTER.txt")
     else
         log("MENU DE-CLUTTER not installed (safe mode, opt-out file, or TabbedMenu unavailable at load).")
     end
