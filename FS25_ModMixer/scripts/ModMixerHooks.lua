@@ -903,6 +903,10 @@ end
 -- verifies the function-arg form on one of OUR fns; on failure this resolver hard-
 -- disables (returns nil) so a broken probe can never produce a wrong name.
 local _getfenv = (type(getfenv) == "function") and getfenv or nil
+-- OUR OWN mod name, captured at load (g_currentModName == us while THIS file executes,
+-- before any other mod loads). The reorder fold and veto must treat ModMixer's own
+-- instrumentation as the referee, never a contestant — see the reorder block.
+local _selfMod = (g_currentModName ~= nil and g_currentModName ~= "") and g_currentModName or "FS25_0_ModMixer"
 local _envToMod, _envMapTick = {}, -1
 local function fenvMod(fn)
     if _getfenv == nil or type(fn) ~= "function" then return nil end
@@ -967,6 +971,18 @@ local function logFenv(target, mod, kind)
     _fenvLogged = _fenvLogged + 1
     log(string.format("FENV NAME: %s -> %s (%s) — owner read from the fn's defining env.",
         tostring(mod), target, tostring(kind)))
+end
+
+-- Capped note: a hook on a reordered target was kept OUT of the fold because it isn't a
+-- third-party contestant (our own instrumentation, or engine/spec composition). It still
+-- installs normally — it just never gets reordered. Shows the referee-never-plays rule firing.
+local _reorderExcludedLogged = 0
+local function logReorderExcluded(target, mod, kind)
+    if _reorderExcludedLogged >= 10 then return end
+    _reorderExcludedLogged = _reorderExcludedLogged + 1
+    log(string.format("REORDER: NOT folding %s -> %s (%s) — %s, installs normally (referee, not a contestant).",
+        tostring(mod), target, tostring(kind),
+        (mod == nil) and "engine/spec or unattributed" or "ModMixer's own instrumentation"))
 end
 
 -- Capped one-liner: note each deferred hook we couldn't name at load, so the log shows
@@ -1229,7 +1245,22 @@ local function patched(orig, existingFn, newFn, kind)
 
     -- REORDER path: buffer the hook and return the trampoline (load-critical
     -- targets are never reordered — they fall through to normal install).
-    if target ~= nil and isReordered(target) and not isLoadCritical(target) then
+    -- CONTESTANTS ONLY: a hook is foldable into the reorder chain only if it belongs to a
+    -- real THIRD-PARTY mod. Two classes must NEVER be folded, because folding them mis-wires
+    -- `self`/super and nils per-vehicle spec state — the 2026-06-13 every-other-boot brick:
+    --   · mod == _selfMod  → ModMixer's OWN instrumentation (hook-probe timers, exec markers;
+    --     fenv-fingerprinting now names them as ours). The referee never plays. The UI already
+    --     hides these (SHOW_SELF_HOOKS=false); the fold must exclude them too.
+    --   · mod == nil       → engine/spec composition or unattributed. Per-type spec overwrites
+    --     (e.g. AIAutomaticSteering.updateVehiclePhysics) route through Utils.overwrittenFunction
+    --     when they wrap the inherited class fn; folding one into the base-class chain runs it
+    --     with the wrong `self` (spec_aiAutomaticSteering == nil) every frame → no controls.
+    -- Excluded hooks fall through and install NORMALLY (they still run, just outside the fold).
+    local foldable = (mod ~= nil and mod ~= _selfMod)
+    if target ~= nil and isReordered(target) and not isLoadCritical(target) and not foldable then
+        logReorderExcluded(target, mod, kind)
+        -- (do not return; fall through to the normal install path below)
+    elseif target ~= nil and isReordered(target) and not isLoadCritical(target) then
         local buf = Utils.__ms_reorderBuf[target]
         if buf == nil then
             buf = { base = existingFn, hooks = {} }   -- first hooker: existingFn is pristine
@@ -1258,7 +1289,7 @@ local function patched(orig, existingFn, newFn, kind)
                         target, #buf.hooks))
                 end
             else
-                buf.hooks[#buf.hooks + 1] = { mod = mod or "(unknown)", impl = newFn, kind = kind }
+                buf.hooks[#buf.hooks + 1] = { mod = mod, impl = newFn, kind = kind }
                 noteHook(mod, target, kind, nil, true, inferred)
                 log(string.format("REORDER: buffered %s -> %s (%s).", tostring(mod), target, kind))
                 return getTrampoline(target)
