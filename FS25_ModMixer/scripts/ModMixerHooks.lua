@@ -682,7 +682,11 @@ end
 do
     local dir = (type(getUserProfileAppPath) == "function") and (getUserProfileAppPath() .. "modSettings/FS25_ModMixer/") or ""
     local optOut = (dir ~= "" and type(fileExists) == "function" and fileExists(dir .. "MODMIXER_NO_DECLUTTER.txt")) and true or false
-    if (not _mmSafeMode(dir)) and (not optOut)
+    -- Runtime flag the Live-tab toggle flips (shared via Utils so Switchboard can drive it). The
+    -- opt-out file sets the BOOT default; a saved Live override (applied at map load) wins. Set it
+    -- always, even when the wrapper can't install, so the toggle's readout stays correct.
+    Utils.__ms_declutterOn = (not optOut)
+    if (not _mmSafeMode(dir))
        and type(TabbedMenu) == "table" and type(TabbedMenu.assignMenuButtonInfo) == "function" then
         -- DEDUP BY INPUT ACTION. The rendered-footer audit (2026-06-14) proved the mess is
         -- DUPLICATE buttons: mods re-add UPGRADE (MENU_EXTRA_1) up to 3x and BACK (MENU_BACK,
@@ -693,11 +697,13 @@ do
         -- Spawn (ACTIVATE_OBJECT), Upgrade (MENU_EXTRA_1), Tag Place (MENU_CANCEL), Back, Visit,
         -- nav — so nothing real is lost and both Spawn + Upgrade fit. Entries with no inputAction
         -- pass through untouched.
-        local _declutterLogged, _dumpCount, _slotAudit = 0, 0, 0
+        local _declutterLogged = 0
         local _origAssignMBI = TabbedMenu.assignMenuButtonInfo
         TabbedMenu.assignMenuButtonInfo = function(self, info, ...)
             local use = info
-            if type(info) == "table" then
+            -- LIVE GATE: the Live-tab toggle flips Utils.__ms_declutterOn; off = pass the stock
+            -- footer through untouched (instant A/B), on = dedup + priority below.
+            if Utils.__ms_declutterOn ~= false and type(info) == "table" then
                 local ok, cleaned, drops = pcall(function()
                     local out, seen, dropped = {}, {}, {}
                     for _, b in ipairs(info) do
@@ -740,62 +746,17 @@ do
                         return keep
                     end)
                     if ok2 and type(ordered) == "table" then use = ordered end
-                    -- one-shot dump of the REAL menuButtonInfo before/after on busy footers, so the
-                    -- duplicate set + what survived are visible (the rendered-slot audit was noisy
-                    -- because hidden physical slots keep stale text).
-                    if _dumpCount < 4 and #info > 6 then
-                        _dumpCount = _dumpCount + 1
-                        pcall(function()
-                            local function fmt(t)
-                                local p = {}
-                                for _, b in ipairs(t) do if type(b) == "table" then p[#p + 1] = tostring(b.inputAction) .. "'" .. tostring(b.text) .. "'" end end
-                                return table.concat(p, " ")
-                            end
-                            log("DECLUTTER in(" .. #info .. "): " .. fmt(info))
-                            log("DECLUTTER out(" .. #use .. "): " .. fmt(use))
-                        end)
-                    end
                     if type(drops) == "table" and #drops > 0 and _declutterLogged < 3 then
                         _declutterLogged = _declutterLogged + 1
                         pcall(function() log("DECLUTTER: folded " .. #drops .. " duplicate footer button(s) [" .. table.concat(drops, ",") .. "]") end)
                     end
                 end
             end
-            local ret = _origAssignMBI(self, use, ...)
-            -- SLOT AUDIT (one-shot, production footer): after layout, dump each PHYSICAL slot's
-            -- visible flag + action + rendered text + screen X. Reveals whether the 7 clean
-            -- buttons overflow off-screen (Upgrade not showing) or slots overlap (the phantom ESCs).
-            if _slotAudit < 3 and type(self.menuButton) == "table" then
-                local isProd = false
-                for _, btn in ipairs(self.menuButton) do
-                    local n = btn.inputActionName
-                    if n == "MENU_EXTRA_1" or n == "ACTIVATE_OBJECT" then isProd = true; break end
-                end
-                if isProd then
-                    _slotAudit = _slotAudit + 1
-                    pcall(function()
-                        local vis, parts = 0, {}
-                        for i, btn in ipairs(self.menuButton) do
-                            local v = btn.visible and true or false
-                            if v then vis = vis + 1 end
-                            local t
-                            if type(btn.getText) == "function" then
-                                local o, x = pcall(function() return btn:getText() end)
-                                if o then t = x end
-                            end
-                            local px = (type(btn.absPosition) == "table" and btn.absPosition[1])
-                                or (type(btn.position) == "table" and btn.position[1]) or nil
-                            parts[#parts + 1] = string.format("%d[%s %s'%s' x=%s]", i, v and "V" or "-", tostring(btn.inputActionName), tostring(t), tostring(px))
-                        end
-                        log("DECLUTTER slots (" .. #self.menuButton .. " total / " .. vis .. " visible): " .. table.concat(parts, " "))
-                    end)
-                end
-            end
-            return ret
+            return _origAssignMBI(self, use, ...)
         end
-        log("MENU DE-CLUTTER active: one button per footer action + priority order (must-haves like Upgrade keep their slot; low-value Tag Place yields on overflow). Opt out: MODMIXER_NO_DECLUTTER.txt")
+        log("MENU DE-CLUTTER installed (live-toggleable in the Live tab; ON = one button per footer action + priority order, OFF = stock footer). Boot default " .. (optOut and "OFF (opt-out file)" or "ON") .. ". Opt out: MODMIXER_NO_DECLUTTER.txt")
     else
-        log("MENU DE-CLUTTER not installed (safe mode, opt-out file, or TabbedMenu unavailable at load).")
+        log("MENU DE-CLUTTER not installed (safe mode or TabbedMenu unavailable at load).")
     end
 end
 

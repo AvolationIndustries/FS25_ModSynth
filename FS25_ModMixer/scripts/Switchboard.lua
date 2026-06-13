@@ -81,6 +81,32 @@ end
 
 SB.registry = {
 
+    -- ModMixer's OWN live toggles (not another mod's feature). Driven by flipping a shared flag
+    -- (Utils.__ms_declutterOn) that the load-first ModMixerHooks de-clutter wrapper reads each
+    -- footer refresh \226\128\148 instant, no restart. Keyed by our installed name so collectRows'
+    -- getModByName() check passes; surfaces in the Live tab like any feature row.
+    ["FS25_0_ModMixer"] = {
+        label  = "ModMixer",
+        author = "Avo",
+        features = {
+            { id = "menuDeclutter", label = "Menu De-Clutter (footer)", kind = "toggle",
+              hint = "Tidies every menu's button bar \226\128\148 one button per action (folds mods' duplicate UPGRADE / blank BACK, i.e. the \"extra ESC\") + priority order so must-haves like UPGRADE keep a slot. OFF = the raw stock footer (handy for an A/B)." },
+        },
+        apply = function(featureId, value)
+            if featureId == "menuDeclutter" then
+                if type(Utils) == "table" then Utils.__ms_declutterOn = (value == true) end
+                return true, "ModMixer de-clutter flag"
+            end
+            return false, "unknown ModMixer feature"
+        end,
+        read = function(featureId)
+            if featureId == "menuDeclutter" and type(Utils) == "table" then
+                return Utils.__ms_declutterOn
+            end
+            return nil
+        end,
+    },
+
     ["FS25_FarmKit"] = {
         label  = "FarmKit",
         author = "NX Modding",
