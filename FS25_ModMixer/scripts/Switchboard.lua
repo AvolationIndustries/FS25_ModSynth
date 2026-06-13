@@ -1311,7 +1311,9 @@ function SB.buildPerformanceRows()
     -- or a GAME SYSTEM (cost comes only from a spec onUpdate/onUpdateTick = a shared base
     -- specialization that mods plug into, e.g. "wheels", "motorized").
     local perMod = {}
+    local perfSelf = g_currentModName or "FS25_0_ModMixer"
     local function bump(name, ms, fromSpec)
+        if name == perfSelf then return end   -- our own instrumentation cost isn't a managed-mod row
         local e = perMod[name]
         if e == nil then e = { ms = 0, isSpec = true }; perMod[name] = e end
         e.ms = e.ms + ms
@@ -1751,11 +1753,17 @@ function SB.buildReviewItems()
     local function bothInstalled(a, b)
         return installedNorm[_normMod(tostring(a))] == true and installedNorm[_normMod(tostring(b))] == true
     end
+    -- ModMixer is instrumentation, never a duplicate-of-another-mod. gen_redundancy.py could
+    -- pair us with a hook-manager on a future regen (we hook many fns + ship a modDesc desc);
+    -- suppress self at runtime so we never appear as a Review duplicate candidate.
+    local reviewSelf = _normMod(g_currentModName or "FS25_0_ModMixer")
+    local function notReviewSelf(x) return _normMod(tostring(x)) ~= reviewSelf end
     -- 1) Redundancy candidates (offline detector: name/hook signals + modDesc descriptions)
     local red = safeGlobal("ModMixerRedundancy")
     if type(red) == "table" then
         for _, p in ipairs(red) do
-            if type(p) == "table" and p.a ~= nil and p.b ~= nil and bothInstalled(p.a, p.b) then
+            if type(p) == "table" and p.a ~= nil and p.b ~= nil and bothInstalled(p.a, p.b)
+               and notReviewSelf(p.a) and notReviewSelf(p.b) then
                 local key = "red|" .. tostring(p.a) .. "|" .. tostring(p.b)
                 items[#items + 1] = {
                     rkind = "redundancy", key = key, dismissed = SB.reviewDismissed[key] == true,
@@ -1797,6 +1805,7 @@ function SB.buildReviewItems()
         local cls = string.match(target, "^([^.]+)%.")
         if cls == nil or not HUD_CLASS[cls] then return end
         if not present(mod) then return end                       -- currently-installed only
+        if hudNorm(mod) == hudNorm(g_currentModName or "FS25_0_ModMixer") then return end  -- never us (covers the bundled fallback too)
         local bucket = hudByTarget[target]
         if bucket == nil then bucket = {}; hudByTarget[target] = bucket end
         bucket[hudNorm(mod)] = mod
@@ -1944,7 +1953,8 @@ function SB.listSettled(currentConflictTargets)
     local losersByTarget = {}
     for key in pairs(SB.vetoes) do
         local m, t = string.match(key, "^(.-)|(.+)$")
-        if m ~= nil and t ~= nil and m ~= "(unknown)" then
+        if m ~= nil and t ~= nil and m ~= "(unknown)"
+           and m ~= (g_currentModName or "FS25_0_ModMixer") then
             losersByTarget[t] = losersByTarget[t] or {}
             table.insert(losersByTarget[t], m)
         end

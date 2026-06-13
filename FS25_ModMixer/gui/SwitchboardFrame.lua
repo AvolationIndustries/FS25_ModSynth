@@ -1138,7 +1138,12 @@ function ModMixerSwitchboardFrame:collectRows()
                 -- Skip the redundant per-type "(unknown)" row (folded out of the contest
                 -- map above) — it's the same mod re-registered per vehicle type, not a
                 -- distinct hooker.
-                local skipRow = (modName == "(unknown)") and redundant[target]
+                -- Self-skip: our own instrumentation wrappers ride these chains but aren't
+                -- contestants (the referee isn't on the scoreboard). The count loop above
+                -- already dropped us, so emitting a self row would inject an inconsistent
+                -- extra contestant — and crash on any target only we hook (list below).
+                local skipRow = ((not SHOW_SELF_HOOKS) and modName == SELF_MOD)
+                    or ((modName == "(unknown)") and redundant[target])
                 -- Hand-curated info first; else the auto-derived info for a discovered
                 -- (wider-net) target; else a plain default.
                 local info   = TARGET_INFO[target]
@@ -1146,7 +1151,7 @@ function ModMixerSwitchboardFrame:collectRows()
                     or { name = target, cat = "Other" }
                 local locked = noVeto[target] == true
                 local vetoed = SB.isHookVetoed ~= nil and SB.isHookVetoed(modName, target)
-                local list   = hookersByTarget[target]
+                local list   = hookersByTarget[target] or {}   -- {} guards a self-only/empty target (no nil #list / ipairs crash)
                 local nHook  = #list
                 local consecutive = (nHook >= 2) and not locked
 
@@ -1293,7 +1298,8 @@ function ModMixerSwitchboardFrame:collectRows()
         local reg = (type(Utils) == "table") and Utils.__ms_hooksByMod or nil
         for key in pairs(SB.vetoes) do
             local vMod, vTarget = string.match(key, "^(.-)|(.+)$")
-            if vMod ~= nil and vTarget ~= nil and vMod ~= "(unknown)" then
+            if vMod ~= nil and vTarget ~= nil and vMod ~= "(unknown)"
+               and (SHOW_SELF_HOOKS or vMod ~= SELF_MOD) then
                 local installed = g_modManager ~= nil and g_modManager:getModByName(vMod) ~= nil
                 local liveHook  = reg ~= nil and reg[vMod] ~= nil and reg[vMod][vTarget] ~= nil
                 if installed and not liveHook then
