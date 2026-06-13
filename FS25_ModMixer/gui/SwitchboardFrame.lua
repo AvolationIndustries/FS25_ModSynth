@@ -97,6 +97,27 @@ function RowSource:populateCellForItemInSection(list, section, index, cell)
     if sliderEl ~= nil then pcall(function() sliderEl:setVisible(isValue) end) end
 
     if isValue and sliderEl ~= nil then
+        -- Amber arrow circles: the stock green left/right arrows take the focus/selected
+        -- highlight colour (green), so on a SELECTED slider row they blend into the green
+        -- row fill and vanish. Recolour the auto-added "left"/"right" arrow buttons amber
+        -- across every overlay state (normal + focused/selected/highlighted/pressed) so they
+        -- stay distinct on both dark and selected rows. setImageColor writes into each state's
+        -- colour table (or the normal fallback when a state colour is unset), so this covers
+        -- all cases. pcall'd; cells recycle, so it re-applies cheaply per populate.
+        if sliderEl.getDescendantByName ~= nil then
+            for _, an in ipairs({ "left", "right" }) do
+                local arrow = sliderEl:getDescendantByName(an)
+                if arrow ~= nil and arrow.setImageColor ~= nil then
+                    pcall(function() arrow:setImageColor(nil, 0.95, 0.66, 0.18, 1) end)
+                    if type(GuiOverlay) == "table" then
+                        for _, sk in ipairs({ "STATE_FOCUSED", "STATE_SELECTED", "STATE_HIGHLIGHTED", "STATE_PRESSED" }) do
+                            local st = GuiOverlay[sk]
+                            if st ~= nil then pcall(function() arrow:setImageColor(st, 0.95, 0.66, 0.18, 1) end) end
+                        end
+                    end
+                end
+            end
+        end
         local tv = valueTextsFor(row)
         if tv ~= nil then
             pcall(function() sliderEl:setTexts(tv.texts) end)
