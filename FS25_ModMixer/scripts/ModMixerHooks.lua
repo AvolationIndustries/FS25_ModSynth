@@ -684,24 +684,49 @@ do
     local optOut = (dir ~= "" and type(fileExists) == "function" and fileExists(dir .. "MODMIXER_NO_DECLUTTER.txt")) and true or false
     if (not _mmSafeMode(dir)) and (not optOut)
        and type(TabbedMenu) == "table" and type(TabbedMenu.assignMenuButtonInfo) == "function" then
-        -- Exit-family action ids (compared by value; mods set inputAction = InputAction.MENU_BACK).
-        local exitSet = {}
-        if type(InputAction) == "table" then
-            for _, n in ipairs({ "MENU_BACK", "MENU_CANCEL" }) do
-                if InputAction[n] ~= nil then exitSet[InputAction[n]] = true end
+        -- Exit-family action ids, built LAZILY: InputAction is often not populated at this
+        -- early load, so building it now can yield an EMPTY set (→ the exit-fold silently does
+        -- nothing, which is exactly the "ESC survived but a slot still freed" symptom). Build it
+        -- on first menu open instead, and cache only once it's non-empty.
+        local exitSet = nil
+        local function getExitSet()
+            if exitSet ~= nil then return exitSet end
+            local s, n = {}, 0
+            if type(InputAction) == "table" then
+                for _, nm in ipairs({ "MENU_BACK", "MENU_CANCEL" }) do
+                    if InputAction[nm] ~= nil then s[InputAction[nm]] = true; n = n + 1 end
+                end
             end
+            if n > 0 then exitSet = s end   -- cache only when populated
+            return s
         end
+        local _declutterDiag = 0
         local _origAssignMBI = TabbedMenu.assignMenuButtonInfo
         TabbedMenu.assignMenuButtonInfo = function(self, info, ...)
             local use = info
             if type(info) == "table" then
+                -- One-shot diagnostic (capped): dump a busy footer's composition so we can see
+                -- each entry's raw inputAction + text — decisive for what the ESC buttons are.
+                if _declutterDiag < 3 and #info > 4 then
+                    _declutterDiag = _declutterDiag + 1
+                    pcall(function()
+                        local parts = {}
+                        for i, b in ipairs(info) do
+                            if type(b) == "table" then
+                                parts[#parts + 1] = string.format("%d[ia=%s txt=%s]", i, tostring(b.inputAction), tostring(b.text))
+                            end
+                        end
+                        log("DECLUTTER DIAG (" .. tostring(#info) .. " entries): " .. table.concat(parts, " "))
+                    end)
+                end
+                local es = getExitSet()
                 local ok, cleaned = pcall(function()
                     local out, seenExit, seenKey = {}, false, {}
                     for _, b in ipairs(info) do
                         local drop = false
                         if type(b) == "table" then
                             local ia = b.inputAction
-                            if ia ~= nil and exitSet[ia] then
+                            if ia ~= nil and es[ia] then
                                 if seenExit then drop = true else seenExit = true end
                             else
                                 -- exact-duplicate fold: same action + text + callback = redundant
